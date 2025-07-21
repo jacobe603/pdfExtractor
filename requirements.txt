@@ -1,0 +1,30 @@
+# Core table extraction libraries
+tabula-py>=2.9.0
+camelot-py[cv]>=0.11.0
+pdfplumber>=0.11.0
+
+# OCR libraries for image-based tables
+pytesseract>=0.3.10
+easyocr>=1.7.0
+pdf2image>=3.1.0
+google-generativeai>=0.3.0
+
+# Data processing
+pandas>=2.0.0
+openpyxl>=3.1.0
+numpy>=1.24.0
+
+# PDF and image handling
+PyPDF2>=3.0.0
+Pillow>=10.0.0
+opencv-python>=4.8.0
+
+# System dependencies:
+# Ubuntu/Debian: 
+#   sudo apt-get install ghostscript python3-tk tesseract-ocr poppler-utils
+# macOS: 
+#   brew install ghostscript tcl-tk tesseract poppler
+# Windows: 
+#   Install Ghostscript: https://www.ghostscript.com/download/gsdnld.html
+#   Install Tesseract: https://github.com/UB-Mannheim/tesseract/wiki
+#   Install Poppler: https://blog.alivate.com.au/poppler-windows/

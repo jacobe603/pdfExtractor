@@ -1,0 +1,3306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Schedule Extractor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    
+    <!-- Optional OCR Features -->
+    <script src="https://unpkg.com/tesseract.js@4/dist/tesseract.min.js"></script>
+    <script src="gemini-ocr-provider.js"></script>
+    <script src="ocr-table-extractor.js"></script>
+    
+    <!-- ZIP File Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <!-- PDF Annotation Support -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .toolbar {
+            background: #2c3e50;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .toolbar h1 {
+            font-size: 1.2em;
+            font-weight: 600;
+        }
+
+        .file-input {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+
+        .file-input input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-input label {
+            background: #3498db;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .file-input label:hover {
+            background: #2980b9;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .btn:hover {
+            background: #219a52;
+        }
+
+        .btn:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .pdf-container {
+            flex: 1;
+            background: white;
+            position: relative;
+            overflow: auto;
+            border-right: 1px solid #ddd;
+        }
+
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+            margin: 20px;
+        }
+
+        .pdf-canvas {
+            border: 1px solid #ccc;
+            cursor: crosshair;
+        }
+
+        .selection-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .selection-rect {
+            position: absolute;
+            border: 2px dashed #e74c3c;
+            background: rgba(231, 76, 60, 0.1);
+            pointer-events: none;
+        }
+
+        .saved-rect {
+            position: absolute;
+            border: 2px solid #3498db;
+            background: rgba(52, 152, 219, 0.1);
+            pointer-events: all;
+            cursor: pointer;
+        }
+
+        .saved-rect:hover {
+            border-color: #2ecc71;
+            background: rgba(46, 204, 113, 0.2);
+        }
+
+        .saved-rect.selected {
+            border-color: #3498db;
+            background: rgba(52, 152, 219, 0.2);
+        }
+
+        .equipment-type-GRD {
+            border-color: #9b59b6;
+            background: rgba(155, 89, 182, 0.1);
+        }
+
+        .equipment-type-VAV {
+            border-color: #e67e22;
+            background: rgba(230, 126, 34, 0.1);
+        }
+
+        .equipment-type-FANS {
+            border-color: #27ae60;
+            background: rgba(39, 174, 96, 0.1);
+        }
+
+        .equipment-type-RTU {
+            border-color: #2980b9;
+            background: rgba(41, 128, 185, 0.1);
+        }
+
+        .equipment-type-OTHER {
+            border-color: #95a5a6;
+            background: rgba(149, 165, 166, 0.1);
+        }
+
+        .sidebar {
+            width: 300px;
+            background: white;
+            border-left: 1px solid #ddd;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .sidebar h3 {
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+
+        .extraction-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .extraction-item {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .extraction-item:hover {
+            background: #e9ecef;
+            border-color: #3498db;
+        }
+
+        .extraction-item.selected {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+
+        .extraction-title {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 4px;
+        }
+
+        .extraction-coords {
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 30px;
+            border-radius: 8px;
+            width: 400px;
+            max-width: 90%;
+        }
+
+        .modal h3 {
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #2c3e50;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .status-bar {
+            background: #ecf0f1;
+            padding: 8px 20px;
+            border-top: 1px solid #bdc3c7;
+            font-size: 0.9em;
+            color: #2c3e50;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #7f8c8d;
+        }
+
+        .page-nav {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-left: auto;
+        }
+
+        .page-nav button {
+            background: #34495e;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .page-nav button:hover {
+            background: #2c3e50;
+        }
+
+        .page-nav button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        .page-info {
+            color: #ecf0f1;
+            font-size: 0.9em;
+        }
+
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .zoom-controls button {
+            background: #34495e;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            width: 30px;
+        }
+
+        .zoom-controls button:hover {
+            background: #2c3e50;
+        }
+
+        .zoom-controls button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+        }
+
+        .zoom-controls span {
+            color: #ecf0f1;
+            font-size: 0.9em;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        /* Search Text Styles */
+        .search-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 5px;
+        }
+
+        .search-controls input[type="text"] {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .search-controls input[type="text"]:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+        }
+
+        .search-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 10px;
+            margin: 2px 0;
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 3px;
+            font-size: 13px;
+        }
+
+        .search-item-text {
+            font-weight: 500;
+            color: #2c3e50;
+        }
+
+        .search-item-remove {
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 2px;
+            padding: 2px 6px;
+            font-size: 11px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        .search-item-remove:hover {
+            background: #c0392b;
+        }
+
+        .search-match {
+            padding: 3px 6px;
+            margin: 2px 0;
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 3px;
+            font-size: 12px;
+            font-family: monospace;
+        }
+
+        .search-match-highlight {
+            background: #ffeb3b;
+            padding: 1px 3px;
+            border-radius: 2px;
+            font-weight: 600;
+        }
+
+        .search-no-results {
+            color: #7f8c8d;
+            font-style: italic;
+            font-size: 12px;
+            text-align: center;
+            padding: 10px;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <h1>PDF Schedule Extractor</h1>
+        <div class="file-input">
+            <input type="file" id="pdf-input" accept=".pdf">
+            <label for="pdf-input">Choose PDF</label>
+        </div>
+        <div class="controls">
+            <button class="btn" id="clear-selections" disabled>Clear All</button>
+            <button class="btn" id="export-data" disabled>Export ZIP Package</button>
+            <label style="font-size: 12px; color: #ecf0f1; margin-left: 10px;">
+                <input type="checkbox" id="enable-text-extraction" checked style="margin-right: 5px;">
+                Text Extraction
+            </label>
+        </div>
+        <div class="zoom-controls">
+            <button id="zoom-out" disabled>-</button>
+            <span id="zoom-level">100%</span>
+            <button id="zoom-in" disabled>+</button>
+        </div>
+        <div class="page-nav">
+            <button id="prev-page" disabled>Previous</button>
+            <span class="page-info">
+                Page <span id="current-page">0</span> of <span id="total-pages">0</span>
+            </span>
+            <button id="next-page" disabled>Next</button>
+        </div>
+    </div>
+
+    <div class="main-content">
+        <div class="pdf-container">
+            <div id="loading" class="loading">
+                Select a PDF file to begin extracting schedules
+            </div>
+            <div class="canvas-container" id="canvas-container" style="display: none;">
+                <canvas id="pdf-canvas" class="pdf-canvas"></canvas>
+                <div class="selection-overlay" id="saved-overlay"></div>
+                <div class="selection-overlay" id="temp-overlay"></div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h3 style="margin: 0;">Extracted Schedules</h3>
+                <button class="btn" id="extract-all" disabled style="font-size: 12px; padding: 6px 12px;">Extract All</button>
+            </div>
+            <div class="extraction-list" id="extraction-list">
+                <p style="color: #7f8c8d; font-style: italic;">No schedules extracted yet</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span id="status-text">Ready</span>
+    </div>
+
+    <div id="schedule-modal" class="modal">
+        <div class="modal-content">
+            <h3>Extraction Information</h3>
+            <!-- 1. Equipment Type (moved to top) -->
+            <div class="form-group">
+                <label for="equipment-type">Equipment Type:</label>
+                <select id="equipment-type">
+                    <option value="FANS">FANS (Fan Equipment)</option>
+                    <option value="VAV">VAV (Variable Air Volume)</option>
+                    <option value="RTU">RTU (Roof Top Units)</option>
+                    <option value="AHU">AHU (Air Handling Units)</option>
+                    <option value="GRD">GRD (Grilles/Diffusers)</option>
+                    <option value="DUCTING">DUCTING (Ductwork)</option>
+                    <option value="CUSTOM">CUSTOM (Add Custom Type)</option>
+                </select>
+            </div>
+            <div class="form-group" id="custom-equipment-group" style="display: none;">
+                <label for="custom-equipment-type">Custom Equipment Type:</label>
+                <input type="text" id="custom-equipment-type" placeholder="e.g., CHILLERS, PUMPS" style="text-transform: uppercase;">
+            </div>
+            
+            <!-- Search Text Section -->
+            <div class="form-group">
+                <label for="search-input">Search Text in Selection:</label>
+                <div class="search-controls">
+                    <input type="text" id="search-input" placeholder="Enter search terms..." style="flex: 1; margin-right: 10px;">
+                    <button type="button" id="add-search-btn" class="btn-secondary" style="padding: 8px 12px;">Add</button>
+                    <button type="button" id="search-btn" class="btn" style="padding: 8px 12px;">Search</button>
+                </div>
+                <div id="search-results" style="display: none; margin-top: 10px; padding: 10px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; max-height: 200px; overflow-y: auto;">
+                    <div class="search-list-header" style="font-weight: 600; margin-bottom: 8px; border-bottom: 1px solid #dee2e6; padding-bottom: 5px;">
+                        Current Searches:
+                    </div>
+                    <div id="search-list" style="margin-bottom: 10px;">
+                        <!-- Search items will be added here -->
+                    </div>
+                    <div id="search-matches" style="border-top: 1px solid #dee2e6; padding-top: 8px; margin-top: 8px;">
+                        <div class="search-matches-header" style="font-weight: 600; margin-bottom: 5px;">Matches Found:</div>
+                        <div id="matches-list">
+                            <!-- Search matches will be displayed here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 2. Extraction Type (moved to second) -->
+            <div class="form-group">
+                <label for="extraction-type">Extraction Type:</label>
+                <select id="extraction-type">
+                    <option value="schedule">Schedule</option>
+                    <option value="drawing">Drawing</option>
+                    <option value="table">Table</option>
+                    <option value="detail">Detail</option>
+                    <option value="specification">Specification</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <!-- 3. Extraction Name (moved to third, will auto-populate) -->
+            <div class="form-group">
+                <label for="extraction-name">Extraction Name:</label>
+                <input type="text" id="extraction-name" placeholder="Auto-generated from type selections">
+            </div>
+            <!-- 4. RFQ Required (new field) -->
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="rfq-required" style="margin-right: 5px;">
+                    RFQ Required (needs 3rd party quote)
+                </label>
+            </div>
+            <!-- 5. Description -->
+            <div class="form-group">
+                <label for="extraction-description">Description:</label>
+                <input type="text" id="extraction-description" placeholder="Brief description of the extraction">
+            </div>
+            <!-- 6. Extract Table with OCR (cleaned up, no debug) -->
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="enable-table-ocr" style="margin-right: 5px;">
+                    Extract Table with OCR (processed in background)
+                </label>
+                <div id="table-ocr-status" style="display: none; margin-top: 5px; font-size: 12px; color: #666;">
+                    Processing...
+                </div>
+                <div id="markdown-output" style="display: none; margin-top: 10px; padding: 10px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">
+                </div>
+            </div>
+            <div class="form-group" id="ocr-config-group" style="display: none;">
+                <label for="ocr-provider">OCR Provider:</label>
+                <select id="ocr-provider" style="margin-bottom: 10px;">
+                    <option value="auto">Auto (Best Available)</option>
+                    <option value="gemini">Google Gemini (Recommended)</option>
+                    <option value="tesseract">Tesseract.js (Fallback)</option>
+                </select>
+                <div id="gemini-config" style="display: none;">
+                    <label for="gemini-api-key">Gemini API Key:</label>
+                    <input type="password" id="gemini-api-key" placeholder="Enter your Gemini API key">
+                    <div style="font-size: 12px; color: #666; margin-top: 5px;">
+                        Get your API key from <a href="https://ai.google.dev/gemini-api/docs/api-key" target="_blank">Google AI Studio</a>
+                    </div>
+                </div>
+                <div id="provider-status" style="margin-top: 10px; font-size: 12px; padding: 8px; border-radius: 4px; display: none;">
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn-secondary" id="modal-cancel">Cancel</button>
+                <button class="btn" id="modal-save">Save Schedule</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize PDF.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        // Application state
+        let currentPDF = null;
+        let currentPDFData = null; // Store original PDF data for annotation
+        let currentPage = 1;
+        let totalPages = 0;
+        let canvas = null;
+        let ctx = null;
+        let isSelecting = false;
+        let startX = 0;
+        let startY = 0;
+        let currentSelection = null;
+        let currentOCRResult = null; // Store the latest OCR result for saving
+        let isModalOpen = false; // Track modal state
+        let extractions = [];
+        let extractionCounter = 0;
+        
+        // Generate unique extraction ID
+        function generateExtractionUID() {
+            // Use timestamp + random for uniqueness
+            const timestamp = Date.now();
+            const random = Math.random().toString(36).substr(2, 9);
+            return `ext_${timestamp}_${random}`;
+        }
+        
+        // Simple OCR queue management
+        function clearAllOCRResults() {
+            currentOCRResult = null;
+            console.log('OCR results cleared');
+        }
+        
+        // Extract page text content asynchronously to avoid blocking page render
+        async function extractPageTextAsync(page, pageNum) {
+            try {
+                console.time(`Page ${pageNum} Text Extraction (Async)`);
+                setStatus(`Extracting text content for page ${pageNum}...`);
+                
+                const textContent = await page.getTextContent();
+                
+                // Only update if we're still on the same page
+                if (currentPage === pageNum) {
+                    currentPageTextContent = textContent;
+                    console.log(`Page ${pageNum} text items extracted:`, textContent?.items?.length || 0);
+                    setStatus(`Page ${pageNum} ready. Text extraction complete.`);
+                } else {
+                    console.log(`Page ${pageNum} text extraction completed but page changed`);
+                }
+                
+                console.timeEnd(`Page ${pageNum} Text Extraction (Async)`);
+            } catch (error) {
+                console.error(`Error extracting text content for page ${pageNum}:`, error);
+                if (currentPage === pageNum) {
+                    currentPageTextContent = null;
+                    setStatus(`Page ${pageNum} rendered. Text extraction failed.`);
+                }
+            }
+        }
+        
+        // Simple OCR management
+        function processPendingOCR() {
+            // No longer needed - OCR is immediate
+        }
+        let selectedExtractionId = null;
+        let editingExtractionId = null; // Track which extraction is being edited
+        let currentExtractionUID = null; // Track current extraction UID for OCR isolation
+        let enableTextExtraction = true; // Setting to enable/disable text extraction for performance
+        let currentZoom = 1.0;
+        const zoomLevels = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
+        let currentZoomIndex = 2;
+        let currentPageTextContent = null;
+        let currentPDFPageHeight = 0;
+        let currentRenderOperation = null;
+        let renderDebounceTimer = null;
+
+        // DOM elements - will be initialized after DOM is loaded
+        let pdfInput, canvasContainer, pdfCanvas, savedOverlay, tempOverlay;
+        let loading, statusText, extractionList, modal, prevPageBtn, nextPageBtn;
+        let currentPageSpan, totalPagesSpan;
+        let clearSelectionsBtn, exportDataBtn, extractAllBtn;
+        let zoomInBtn, zoomOutBtn, zoomLevelSpan;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Initialize DOM elements
+            pdfInput = document.getElementById('pdf-input');
+            canvasContainer = document.getElementById('canvas-container');
+            pdfCanvas = document.getElementById('pdf-canvas');
+            savedOverlay = document.getElementById('saved-overlay');
+            tempOverlay = document.getElementById('temp-overlay');
+            loading = document.getElementById('loading');
+            statusText = document.getElementById('status-text');
+            extractionList = document.getElementById('extraction-list');
+            modal = document.getElementById('schedule-modal');
+            prevPageBtn = document.getElementById('prev-page');
+            nextPageBtn = document.getElementById('next-page');
+            currentPageSpan = document.getElementById('current-page');
+            totalPagesSpan = document.getElementById('total-pages');
+            clearSelectionsBtn = document.getElementById('clear-selections');
+            exportDataBtn = document.getElementById('export-data');
+            extractAllBtn = document.getElementById('extract-all');
+            zoomInBtn = document.getElementById('zoom-in');
+            zoomOutBtn = document.getElementById('zoom-out');
+            zoomLevelSpan = document.getElementById('zoom-level');
+            
+            canvas = pdfCanvas;
+            ctx = canvas.getContext('2d');
+            setupEventListeners();
+        });
+
+        function setupEventListeners() {
+            pdfInput.addEventListener('change', handleFileSelect);
+            canvas.addEventListener('mousedown', startSelection);
+            canvas.addEventListener('mousemove', updateSelection);
+            canvas.addEventListener('mouseup', endSelection);
+            prevPageBtn.addEventListener('click', () => changePage(-1));
+            nextPageBtn.addEventListener('click', () => changePage(1));
+            clearSelectionsBtn.addEventListener('click', clearAllSelections);
+            exportDataBtn.addEventListener('click', exportExtractions);
+            extractAllBtn.addEventListener('click', extractAllImages);
+            zoomInBtn.addEventListener('click', zoomIn);
+            zoomOutBtn.addEventListener('click', zoomOut);
+            
+            // Text extraction toggle
+            document.getElementById('enable-text-extraction').addEventListener('change', function(e) {
+                enableTextExtraction = e.target.checked;
+                console.log('Text extraction', enableTextExtraction ? 'enabled' : 'disabled');
+                
+                // If we just enabled it and we're on a page without text content, extract it now
+                if (enableTextExtraction && currentPDF && !currentPageTextContent) {
+                    currentPDF.getPage(currentPage).then(page => {
+                        extractPageTextAsync(page, currentPage);
+                    });
+                }
+            });
+            
+            // Mouse wheel zoom
+            canvas.addEventListener('wheel', handleMouseWheel, { passive: false });
+            
+            // Modal event listeners
+            document.getElementById('modal-cancel').addEventListener('click', closeModal);
+            document.getElementById('modal-save').addEventListener('click', saveSchedule);
+            document.getElementById('enable-table-ocr').addEventListener('change', toggleTableOCR);
+            document.getElementById('equipment-type').addEventListener('change', handleEquipmentTypeChange);
+            document.getElementById('extraction-type').addEventListener('change', handleExtractionTypeChange);
+            document.getElementById('custom-equipment-type').addEventListener('input', handleCustomEquipmentTypeChange);
+            document.getElementById('custom-equipment-type').addEventListener('change', handleCustomEquipmentTypeChange);
+            
+            // Add Enter key handler for modal
+            modal.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.altKey) {
+                    // Only trigger if we're not in the debug textarea and modal is visible
+                    if (modal.style.display === 'block' && e.target.tagName !== 'TEXTAREA') {
+                        e.preventDefault();
+                        saveSchedule();
+                    }
+                }
+            });
+            
+            // Close modal when clicking outside
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            });
+
+            // Search functionality event listeners
+            const searchInput = document.getElementById('search-input');
+            const addSearchBtn = document.getElementById('add-search-btn');
+            const searchBtn = document.getElementById('search-btn');
+
+            if (searchInput) {
+                searchInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addSearchTerm();
+                    }
+                });
+            }
+
+            if (addSearchBtn) {
+                addSearchBtn.addEventListener('click', addSearchTerm);
+            }
+
+            if (searchBtn) {
+                searchBtn.addEventListener('click', performTextSearch);
+            }
+        }
+
+        async function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            console.time('PDF Loading Total');
+            setStatus('Loading PDF...');
+            loading.style.display = 'block';
+            canvasContainer.style.display = 'none';
+
+            try {
+                console.time('PDF File Reading');
+                const arrayBuffer = await file.arrayBuffer();
+                console.timeEnd('PDF File Reading');
+                
+                console.time('PDF Document Parsing');
+                currentPDFData = arrayBuffer.slice(); // Create a copy to prevent detachment
+                currentPDF = await pdfjsLib.getDocument(arrayBuffer).promise;
+                totalPages = currentPDF.numPages;
+                currentPage = 1;
+                console.timeEnd('PDF Document Parsing');
+                
+                console.time('Initial Page Render');
+                updatePageInfo();
+                await renderPage(currentPage);
+                console.timeEnd('Initial Page Render');
+                
+                canvasContainer.style.display = 'block';
+                loading.style.display = 'none';
+                setStatus('PDF loaded successfully. Click and drag to select schedule areas.');
+                console.timeEnd('PDF Loading Total');
+                
+                // Enable controls
+                prevPageBtn.disabled = currentPage === 1;
+                nextPageBtn.disabled = currentPage === totalPages;
+                clearSelectionsBtn.disabled = false;
+                exportDataBtn.disabled = false;
+                extractAllBtn.disabled = extractions.length === 0;
+                zoomInBtn.disabled = false;
+                zoomOutBtn.disabled = false;
+                updateZoomControls();
+                
+            } catch (error) {
+                console.error('Error loading PDF:', error);
+                setStatus('Error loading PDF. Please try again.');
+                loading.innerHTML = 'Error loading PDF. Please select a valid PDF file.';
+            }
+        }
+
+        async function renderPage(pageNum) {
+            if (!currentPDF) return;
+
+            console.time(`Page ${pageNum} Render Total`);
+
+            // Cancel any existing render operation
+            if (currentRenderOperation) {
+                try {
+                    await currentRenderOperation._transport.destroy();
+                } catch (error) {
+                    // Ignore cancellation errors
+                }
+            }
+
+            setStatus(`Rendering page ${pageNum}...`);
+            
+            try {
+                console.time(`Page ${pageNum} Get Page`);
+                const page = await currentPDF.getPage(pageNum);
+                console.timeEnd(`Page ${pageNum} Get Page`);
+                
+                console.time(`Page ${pageNum} Setup Canvas`);
+                const viewport = page.getViewport({ scale: 1.5 * currentZoom });
+                
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                
+                // Store PDF page height for coordinate conversions
+                currentPDFPageHeight = viewport.height;
+                
+                // Clear temporary overlay only
+                clearTempOverlay();
+                
+                const renderContext = {
+                    canvasContext: ctx,
+                    viewport: viewport
+                };
+                console.timeEnd(`Page ${pageNum} Setup Canvas`);
+                
+                console.time(`Page ${pageNum} PDF Render`);
+                // Store current render operation
+                currentRenderOperation = page.render(renderContext);
+                await currentRenderOperation.promise;
+                currentRenderOperation = null;
+                console.timeEnd(`Page ${pageNum} PDF Render`);
+                
+                // Extract text content asynchronously to avoid blocking page render (if enabled)
+                currentPageTextContent = null; // Clear immediately
+                if (enableTextExtraction) {
+                    extractPageTextAsync(page, pageNum);
+                } else {
+                    setStatus(`Page ${pageNum} rendered. Text extraction disabled for performance.`);
+                }
+                
+                console.time(`Page ${pageNum} Restore Selections`);
+                // Restore selections for this page
+                restoreSelectionsForPage(pageNum);
+                console.timeEnd(`Page ${pageNum} Restore Selections`);
+                
+                console.timeEnd(`Page ${pageNum} Render Total`);
+                setStatus(`Page ${pageNum} rendered. Click and drag to select schedule areas.`);
+                
+            } catch (error) {
+                if (error.name !== 'RenderingCancelledException') {
+                    console.error('Error rendering page:', error);
+                    setStatus('Error rendering page');
+                }
+                currentRenderOperation = null;
+            }
+        }
+
+        function zoomIn() {
+            if (currentZoomIndex < zoomLevels.length - 1) {
+                currentZoomIndex++;
+                currentZoom = zoomLevels[currentZoomIndex];
+                updateZoomControls();
+                // Clear overlays before re-rendering to prevent duplicates
+                clearSavedOverlay();
+                clearTempOverlay();
+                debouncedRenderPage(currentPage);
+            }
+        }
+
+        function zoomOut() {
+            if (currentZoomIndex > 0) {
+                currentZoomIndex--;
+                currentZoom = zoomLevels[currentZoomIndex];
+                updateZoomControls();
+                // Clear overlays before re-rendering to prevent duplicates
+                clearSavedOverlay();
+                clearTempOverlay();
+                debouncedRenderPage(currentPage);
+            }
+        }
+
+        function debouncedRenderPage(pageNum) {
+            // Clear any existing debounce timer
+            if (renderDebounceTimer) {
+                clearTimeout(renderDebounceTimer);
+            }
+            
+            // Set a new debounce timer
+            renderDebounceTimer = setTimeout(() => {
+                renderPage(pageNum);
+                renderDebounceTimer = null;
+            }, 100); // 100ms debounce
+        }
+
+        function updateZoomControls() {
+            zoomLevelSpan.textContent = Math.round(currentZoom * 100) + '%';
+            zoomInBtn.disabled = currentZoomIndex >= zoomLevels.length - 1;
+            zoomOutBtn.disabled = currentZoomIndex <= 0;
+        }
+
+        function handleMouseWheel(event) {
+            // Check if Ctrl key is pressed (for zoom)
+            if (event.ctrlKey) {
+                event.preventDefault();
+                if (event.deltaY < 0) {
+                    // Scroll up - zoom in
+                    zoomIn();
+                } else {
+                    // Scroll down - zoom out
+                    zoomOut();
+                }
+            } else {
+                // Normal scrolling for panning
+                event.preventDefault();
+                
+                const scrollAmount = 50; // pixels per scroll increment
+                const container = document.querySelector('.pdf-container');
+                
+                if (event.shiftKey) {
+                    // Horizontal scrolling with Shift+scroll
+                    container.scrollBy({
+                        left: event.deltaY > 0 ? scrollAmount : -scrollAmount,
+                        behavior: 'smooth'
+                    });
+                } else {
+                    // Vertical scrolling
+                    container.scrollBy({
+                        top: event.deltaY > 0 ? scrollAmount : -scrollAmount,
+                        behavior: 'smooth'
+                    });
+                }
+            }
+        }
+
+        function changePage(direction) {
+            const newPage = currentPage + direction;
+            if (newPage >= 1 && newPage <= totalPages) {
+                currentPage = newPage;
+                updatePageInfo();
+                // Clear overlays before changing pages
+                clearSavedOverlay();
+                clearTempOverlay();
+                renderPage(currentPage);
+            }
+        }
+
+        function updatePageInfo() {
+            currentPageSpan.textContent = currentPage;
+            totalPagesSpan.textContent = totalPages;
+            prevPageBtn.disabled = currentPage === 1;
+            nextPageBtn.disabled = currentPage === totalPages;
+        }
+
+        function startSelection(event) {
+            const rect = canvas.getBoundingClientRect();
+            // Store raw screen coordinates relative to canvas
+            startX = event.clientX - rect.left;
+            startY = event.clientY - rect.top;
+            isSelecting = true;
+            
+            // Clear temporary overlay only
+            clearTempOverlay();
+        }
+
+        function updateSelection(event) {
+            if (!isSelecting) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            // Store raw screen coordinates relative to canvas
+            const currentX = event.clientX - rect.left;
+            const currentY = event.clientY - rect.top;
+            
+            clearTempOverlay();
+            drawTempSelectionRect(startX, startY, currentX, currentY);
+        }
+
+        function endSelection(event) {
+            if (!isSelecting) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            // Store raw screen coordinates relative to canvas
+            const endX = event.clientX - rect.left;
+            const endY = event.clientY - rect.top;
+            
+            isSelecting = false;
+            
+            // Calculate selection bounds in screen coordinates
+            const screenX = Math.min(startX, endX);
+            const screenY = Math.min(startY, endY);
+            const screenWidth = Math.abs(endX - startX);
+            const screenHeight = Math.abs(endY - startY);
+            
+            // Convert screen coordinates to PDF coordinates
+            // Screen coordinates are at current display scale (1.5 * currentZoom)
+            // We need to normalize to base PDF scale (1.0)
+            const currentDisplayScale = 1.5 * currentZoom;
+            
+            // Convert to PDF coordinates (normalized to scale 1.0)
+            const pdfX = screenX / currentDisplayScale;
+            const pdfY = screenY / currentDisplayScale;
+            const pdfWidth = screenWidth / currentDisplayScale;
+            const pdfHeight = screenHeight / currentDisplayScale;
+            
+            console.log('Selection debug:', {
+                currentZoom,
+                currentDisplayScale,
+                screenCoords: { screenX, screenY, screenWidth, screenHeight },
+                pdfCoords: { pdfX, pdfY, pdfWidth, pdfHeight },
+                canvasSize: { width: canvas.width, height: canvas.height }
+            });
+            
+            // Only process if selection is meaningful (larger than 10x10 in screen coordinates)
+            if (screenWidth > 10 && screenHeight > 10) {
+                currentSelection = { x: pdfX, y: pdfY, width: pdfWidth, height: pdfHeight, page: currentPage };
+                showScheduleModal();
+            } else {
+                clearTempOverlay();
+            }
+        }
+
+        function drawTempSelectionRect(x1, y1, x2, y2) {
+            const x = Math.min(x1, x2);
+            const y = Math.min(y1, y2);
+            const width = Math.abs(x2 - x1);
+            const height = Math.abs(y2 - y1);
+            
+            const selectionRect = document.createElement('div');
+            selectionRect.className = 'selection-rect';
+            selectionRect.style.left = x + 'px';
+            selectionRect.style.top = y + 'px';
+            selectionRect.style.width = width + 'px';
+            selectionRect.style.height = height + 'px';
+            
+            tempOverlay.appendChild(selectionRect);
+        }
+
+        function clearTempOverlay() {
+            tempOverlay.innerHTML = '';
+        }
+
+        function clearSavedOverlay() {
+            savedOverlay.innerHTML = '';
+        }
+
+        function showScheduleModal() {
+            // Set modal state
+            isModalOpen = true;
+            
+            // Initialize search text state
+            initializeSearchText();
+            
+            // Clear any previous OCR data completely
+            currentOCRResult = null;
+            editingExtractionId = null; // Ensure we're not in editing mode
+            
+            // Clear ALL OCR UI elements thoroughly - use innerHTML to clear all content including HTML
+            document.getElementById('markdown-output').innerHTML = '';
+            document.getElementById('table-ocr-status').innerHTML = '';
+            document.getElementById('table-ocr-status').style.display = 'none';
+            document.getElementById('markdown-output').style.display = 'none';
+            document.getElementById('ocr-config-group').style.display = 'none';
+            document.getElementById('enable-table-ocr').checked = false;
+            
+            // Clear OCR preview container
+            const previewContainer = document.getElementById('ocr-preview');
+            if (previewContainer) {
+                previewContainer.innerHTML = '';
+            }
+            
+            // Try to auto-detect schedule information
+            const detectedInfo = detectScheduleInfo();
+            
+            // Set the detected equipment type first
+            document.getElementById('equipment-type').value = detectedInfo.type || 'FANS';
+            document.getElementById('extraction-type').value = 'schedule'; // Default extraction type
+            document.getElementById('extraction-description').value = detectedInfo.notes || '';
+            document.getElementById('rfq-required').checked = false; // Default RFQ to unchecked
+            
+            // Generate auto name after setting the types
+            generateExtractionName();
+            
+            modal.style.display = 'block';
+            document.getElementById('extraction-name').focus();
+        }
+
+        function detectScheduleInfo() {
+            if (!currentPageTextContent || !currentSelection) {
+                // If text content isn't ready yet, return defaults
+                if (!currentPageTextContent) {
+                    if (!enableTextExtraction) {
+                        console.log('Text extraction disabled - auto-detection unavailable');
+                    } else {
+                        console.log('Text content not ready for auto-detection, using defaults');
+                    }
+                }
+                return { name: '', type: 'FANS', notes: '' };
+            }
+            
+            // Extract text items within or near the selection area
+            const selectionText = extractTextFromSelection(currentSelection);
+            
+            // Try to detect schedule title
+            const titleMatch = detectScheduleTitle(selectionText);
+            
+            // Try to detect equipment type
+            const equipmentType = detectEquipmentType(selectionText);
+            
+            return {
+                name: titleMatch || '',
+                type: equipmentType || 'FANS',
+                notes: ''
+            };
+        }
+
+        function extractTextFromSelection(selection) {
+            if (!currentPageTextContent) return '';
+            
+            const textItems = [];
+            const scale = 1.5; // Base scale used in rendering
+            
+            currentPageTextContent.items.forEach(item => {
+                const transform = item.transform;
+                // PDF coordinates: transform[4] = x, transform[5] = y
+                // PDF uses bottom-left origin, canvas uses top-left origin
+                const pdfX = transform[4];
+                const pdfY = transform[5];
+                
+                // Convert PDF coordinates to canvas coordinates
+                // Note: PDF y-coordinates are from bottom, canvas y-coordinates are from top
+                const canvasX = pdfX / scale;
+                const canvasY = (canvas.height / (scale * currentZoom)) - (pdfY / scale);
+                
+                // Check if text is within or near the selection bounds (in original coordinates)
+                const buffer = 30; // Allow some buffer around selection
+                if (canvasX >= selection.x - buffer && 
+                    canvasX <= selection.x + selection.width + buffer &&
+                    canvasY >= selection.y - buffer && 
+                    canvasY <= selection.y + selection.height + buffer) {
+                    textItems.push({
+                        text: item.str,
+                        x: canvasX,
+                        y: canvasY
+                    });
+                }
+            });
+            
+            // Sort by y position (top to bottom) then x position (left to right)
+            textItems.sort((a, b) => {
+                if (Math.abs(a.y - b.y) < 10) { // Same line
+                    return a.x - b.x;
+                }
+                return a.y - b.y;
+            });
+            
+            return textItems.map(item => item.text).join(' ');
+        }
+
+        function detectScheduleTitle(text) {
+            const titlePatterns = [
+                /([A-Z\s]*SCHEDULE)/i,
+                /(FAN\s*SCHEDULE)/i,
+                /(VAV\s*SCHEDULE)/i,
+                /(RTU\s*SCHEDULE)/i,
+                /(GRILLE?\s*SCHEDULE)/i,
+                /(DIFFUSER\s*SCHEDULE)/i,
+                /(EQUIPMENT\s*SCHEDULE)/i
+            ];
+            
+            for (const pattern of titlePatterns) {
+                const match = text.match(pattern);
+                if (match) {
+                    return match[1].trim();
+                }
+            }
+            
+            return null;
+        }
+
+        function detectEquipmentType(text) {
+            const typePatterns = [
+                { pattern: /fan|exhaust|supply/i, type: 'FANS' },
+                { pattern: /vav|variable\s*air\s*volume/i, type: 'VAV' },
+                { pattern: /rtu|roof\s*top\s*unit/i, type: 'RTU' },
+                { pattern: /grille|diffuser|grd/i, type: 'GRD' }
+            ];
+            
+            for (const { pattern, type } of typePatterns) {
+                if (pattern.test(text)) {
+                    return type;
+                }
+            }
+            
+            return 'OTHER';
+        }
+
+        function toggleOCRDebug() {
+            const debugDiv = document.getElementById('ocr-debug');
+            const checkbox = document.getElementById('debug-ocr');
+            
+            if (checkbox.checked) {
+                debugDiv.style.display = 'block';
+                updateOCRDebugInfo();
+            } else {
+                debugDiv.style.display = 'none';
+            }
+        }
+
+        function updateOCRDebugInfo() {
+            const debugDiv = document.getElementById('ocr-debug');
+            const checkbox = document.getElementById('debug-ocr');
+            
+            if (!checkbox.checked || !currentPageTextContent || !currentSelection) {
+                return;
+            }
+            
+            const selectionText = extractTextFromSelection(currentSelection);
+            const detectedTitle = detectScheduleTitle(selectionText);
+            const detectedType = detectEquipmentType(selectionText);
+            
+            let debugInfo = `=== OCR DEBUG INFO ===\n\n`;
+            debugInfo += `Current zoom: ${currentZoom} (${Math.round(currentZoom * 100)}%)\n`;
+            debugInfo += `Canvas size: ${canvas.width} x ${canvas.height}\n`;
+            debugInfo += `Display scale: ${1.5 * currentZoom}\n\n`;
+            debugInfo += `Selection coordinates: (${currentSelection.x.toFixed(1)}, ${currentSelection.y.toFixed(1)}) `;
+            debugInfo += `${currentSelection.width.toFixed(1)}x${currentSelection.height.toFixed(1)}\n\n`;
+            
+            debugInfo += `Extracted text: "${selectionText}"\n\n`;
+            debugInfo += `Detected title: "${detectedTitle || 'None'}"\n`;
+            debugInfo += `Detected type: "${detectedType}"\n\n`;
+            
+            debugInfo += `=== ALL TEXT ITEMS IN SELECTION ===\n`;
+            const textItems = getTextItemsInSelection(currentSelection);
+            textItems.forEach((item, index) => {
+                debugInfo += `${index + 1}. "${item.text}" at (${item.x.toFixed(1)}, ${item.y.toFixed(1)})\n`;
+            });
+            
+            debugDiv.textContent = debugInfo;
+        }
+
+        function getTextItemsInSelection(selection) {
+            if (!currentPageTextContent) return [];
+            
+            const textItems = [];
+            const scale = 1.5;
+            
+            currentPageTextContent.items.forEach(item => {
+                const transform = item.transform;
+                const pdfX = transform[4];
+                const pdfY = transform[5];
+                
+                const canvasX = pdfX / scale;
+                const canvasY = (canvas.height / (scale * currentZoom)) - (pdfY / scale);
+                
+                const buffer = 30;
+                if (canvasX >= selection.x - buffer && 
+                    canvasX <= selection.x + selection.width + buffer &&
+                    canvasY >= selection.y - buffer && 
+                    canvasY <= selection.y + selection.height + buffer) {
+                    textItems.push({
+                        text: item.str,
+                        x: canvasX,
+                        y: canvasY
+                    });
+                }
+            });
+            
+            return textItems.sort((a, b) => {
+                if (Math.abs(a.y - b.y) < 10) {
+                    return a.x - b.x;
+                }
+                return a.y - b.y;
+            });
+        }
+
+        function toggleTableOCR() {
+            const checkbox = document.getElementById('enable-table-ocr');
+            const statusDiv = document.getElementById('table-ocr-status');
+            const outputDiv = document.getElementById('markdown-output');
+            const configGroup = document.getElementById('ocr-config-group');
+            
+            // Add null checks for DOM elements
+            if (!checkbox || !statusDiv || !outputDiv || !configGroup) {
+                console.error('OCR toggle failed: missing DOM elements');
+                return;
+            }
+            
+            if (checkbox.checked) {
+                if (!window.OCRTableExtractor || !window.OCRTableExtractor.isSupported()) {
+                    alert('OCR functionality not available. Please check that required libraries are loaded.');
+                    checkbox.checked = false;
+                    return;
+                }
+                
+                statusDiv.style.display = 'block';
+                outputDiv.style.display = 'block';
+                configGroup.style.display = 'block';
+                
+                // Initialize OCR config
+                initOCRConfig();
+                
+                // Run OCR immediately in modal
+                processTableOCR();
+            } else {
+                statusDiv.style.display = 'none';
+                outputDiv.style.display = 'none';
+                configGroup.style.display = 'none';
+                currentOCRResult = null; // Clear stored OCR result
+            }
+        }
+
+        function initOCRConfig() {
+            const providerSelect = document.getElementById('ocr-provider');
+            const geminiConfig = document.getElementById('gemini-config');
+            const providerStatus = document.getElementById('provider-status');
+            const apiKeyInput = document.getElementById('gemini-api-key');
+            
+            // Add null checks
+            if (!providerSelect || !geminiConfig || !providerStatus || !apiKeyInput) {
+                console.error('OCR config init failed: missing DOM elements');
+                return;
+            }
+            
+            // Load saved API key
+            const savedApiKey = localStorage.getItem('gemini-api-key');
+            if (savedApiKey) {
+                apiKeyInput.value = savedApiKey;
+            }
+            
+            // Show/hide Gemini config based on provider selection
+            function updateProviderUI() {
+                const selectedProvider = providerSelect.value;
+                
+                if (selectedProvider === 'gemini') {
+                    geminiConfig.style.display = 'block';
+                } else {
+                    geminiConfig.style.display = 'none';
+                }
+                
+                // Update provider status
+                updateProviderStatus();
+            }
+            
+            function updateProviderStatus() {
+                const providers = window.OCRTableExtractor.getAvailableProviders();
+                let statusText = '';
+                let statusClass = '';
+                
+                if (providers.length === 0) {
+                    statusText = 'No OCR providers available';
+                    statusClass = 'error';
+                } else {
+                    const providerNames = providers.map(p => p.name).join(', ');
+                    statusText = `Available providers: ${providerNames}`;
+                    statusClass = 'success';
+                }
+                
+                providerStatus.textContent = statusText;
+                providerStatus.className = statusClass;
+                providerStatus.style.display = 'block';
+                
+                if (statusClass === 'error') {
+                    providerStatus.style.backgroundColor = '#f8d7da';
+                    providerStatus.style.color = '#721c24';
+                    providerStatus.style.borderColor = '#f5c6cb';
+                } else {
+                    providerStatus.style.backgroundColor = '#d4edda';
+                    providerStatus.style.color = '#155724';
+                    providerStatus.style.borderColor = '#c3e6cb';
+                }
+            }
+            
+            // Add event listeners
+            providerSelect.addEventListener('change', updateProviderUI);
+            
+            // Save API key on change
+            document.getElementById('gemini-api-key').addEventListener('input', function() {
+                localStorage.setItem('gemini-api-key', this.value);
+            });
+            
+            // Initial update
+            updateProviderUI();
+        }
+
+        async function processTableOCR() {
+            if (!currentSelection) {
+                console.warn('No selection available for OCR');
+                return;
+            }
+            
+            const statusDiv = document.getElementById('table-ocr-status');
+            const outputDiv = document.getElementById('markdown-output');
+            
+            try {
+                statusDiv.textContent = 'Processing image with OCR...';
+                statusDiv.style.color = '#007bff';
+                
+                // Extract high-res image for OCR
+                const imageData = await extractImageFromSelection(currentSelection);
+                
+                statusDiv.textContent = 'Detecting table structure...';
+                
+                // Get OCR options
+                const providerSelect = document.getElementById('ocr-provider');
+                const apiKeyInput = document.getElementById('gemini-api-key');
+                
+                const options = {};
+                if (providerSelect.value !== 'auto') {
+                    options.provider = providerSelect.value;
+                }
+                if (apiKeyInput.value) {
+                    options.apiKey = apiKeyInput.value;
+                }
+                
+                // Process with OCR module
+                const result = await window.OCRTableExtractor.extractTable(imageData, options);
+                
+                if (result.success) {
+                    const confidence = result.confidence || 0;
+                    statusDiv.textContent = `✓ Table detected (${confidence.toFixed(1)}% confidence) - ${result.provider}`;
+                    statusDiv.style.color = '#28a745';
+                    
+                    // Store OCR result for this session
+                    currentOCRResult = result;
+                    
+                    // Build preview content with table and notes
+                    let previewContent = result.markdown || '';
+                    
+                    // Add notes section if available
+                    const notes = result.notes || result.tableData?.notes;
+                    if (notes && notes.hasNotes) {
+                        previewContent += '\n\n## Installation Notes & Requirements\n';
+                        previewContent += `**Total Notes:** ${notes.count}\n\n`;
+                        
+                        notes.entries.forEach((note, index) => {
+                            const cleanNote = note.replace(/^\d+\)\s*/, '');
+                            previewContent += `${index + 1}. ${cleanNote}\n`;
+                        });
+                    }
+                    
+                    outputDiv.textContent = previewContent;
+                    
+                    // Auto-populate extraction name if detected
+                    if (result.tableData && result.tableData.isTable && result.text && result.text.toLowerCase().includes('schedule')) {
+                        const nameField = document.getElementById('extraction-name');
+                        const extractionTypeField = document.getElementById('extraction-type');
+                        if (!nameField.value) {
+                            const titleMatch = result.text.match(/([A-Z\s]*SCHEDULE)/i);
+                            if (titleMatch) {
+                                nameField.value = titleMatch[1].trim();
+                                extractionTypeField.value = 'schedule';
+                            }
+                        }
+                    }
+                } else {
+                    statusDiv.textContent = `✗ ${result.error}`;
+                    statusDiv.style.color = '#dc3545';
+                    outputDiv.textContent = result.fallbackText || 'OCR processing failed';
+                }
+                
+            } catch (error) {
+                console.error('OCR processing error:', error);
+                statusDiv.textContent = `✗ Error: ${error.message}`;
+                statusDiv.style.color = '#dc3545';
+                outputDiv.textContent = 'OCR processing failed';
+            }
+        }
+
+        function generateExtractionName() {
+            const equipmentSelect = document.getElementById('equipment-type');
+            const extractionSelect = document.getElementById('extraction-type');
+            const customEquipmentInput = document.getElementById('custom-equipment-type');
+            const nameInput = document.getElementById('extraction-name');
+            
+            // Debug: Check if elements exist
+            if (!equipmentSelect || !extractionSelect || !nameInput) {
+                console.error('Name generation failed: Missing DOM elements');
+                return;
+            }
+            
+            // Get the current equipment type
+            let equipmentType = equipmentSelect.value;
+            console.log('Raw equipment type:', equipmentType); // Debug
+            
+            if (equipmentType === 'CUSTOM') {
+                const customValue = customEquipmentInput ? customEquipmentInput.value.trim() : '';
+                if (customValue) {
+                    equipmentType = customValue.toUpperCase();
+                } else {
+                    // If CUSTOM is selected but no custom type entered yet, use placeholder
+                    equipmentType = 'CUSTOM';
+                }
+            }
+            
+            // Fallback if equipment type is empty
+            if (!equipmentType) {
+                equipmentType = 'FANS'; // Default fallback
+            }
+            
+            // Get extraction type and capitalize first letter
+            const extractionType = extractionSelect.value;
+            console.log('Raw extraction type:', extractionType); // Debug
+            const capitalizedExtractionType = extractionType ? extractionType.charAt(0).toUpperCase() + extractionType.slice(1) : 'Schedule';
+            
+            // Generate base name
+            const baseName = `${equipmentType} - ${capitalizedExtractionType}`;
+            console.log('Generated base name:', baseName); // Debug
+            
+            // Check for existing names and add number if needed
+            const existingNames = extractions.map(e => e.extractionName || e.name);
+            let counter = 1;
+            let uniqueName = baseName;
+            
+            while (existingNames.includes(uniqueName)) {
+                counter++;
+                uniqueName = `${baseName} ${counter}`;
+            }
+            
+            console.log('Final unique name:', uniqueName); // Debug
+            
+            // Update the name input (only if it's currently auto-generated or empty)
+            const currentName = nameInput.value.trim();
+            console.log('Current name in input:', currentName); // Debug
+            
+            // Check if current name appears to be auto-generated (follows the pattern "TYPE - TYPE" or is empty)
+            const autoGenPattern = /^[A-Z]+(?:\s+[A-Z]+)?\s*-\s*[A-Z][a-z]+(?:\s+\d+)?$/;
+            const isAutoGenerated = !currentName || 
+                                  currentName === nameInput.placeholder ||
+                                  autoGenPattern.test(currentName) ||
+                                  // Also update if the name contains any of the standard equipment types
+                                  ['FANS', 'VAV', 'RTU', 'GRD', 'AHU', 'DUCTING', 'CUSTOM'].some(type => 
+                                      currentName.includes(type + ' -'));
+            
+            if (isAutoGenerated || !currentName) {
+                nameInput.value = uniqueName;
+                console.log('Name input updated to:', uniqueName); // Debug
+            } else {
+                console.log('Name input left unchanged (appears to be user-modified)'); // Debug
+            }
+        }
+
+        function handleEquipmentTypeChange() {
+            const equipmentType = document.getElementById('equipment-type').value;
+            const customGroup = document.getElementById('custom-equipment-group');
+            
+            if (equipmentType === 'CUSTOM') {
+                customGroup.style.display = 'block';
+                document.getElementById('custom-equipment-type').focus();
+            } else {
+                customGroup.style.display = 'none';
+                document.getElementById('custom-equipment-type').value = '';
+            }
+            
+            // Update auto-generated name
+            generateExtractionName();
+        }
+        
+        function handleExtractionTypeChange() {
+            // Update auto-generated name when extraction type changes
+            generateExtractionName();
+        }
+        
+        // Throttle name generation for custom equipment type
+        let customEquipmentTimeout = null;
+        function handleCustomEquipmentTypeChange() {
+            // Clear previous timeout
+            if (customEquipmentTimeout) {
+                clearTimeout(customEquipmentTimeout);
+            }
+            
+            // Throttle name generation to avoid updating on every keystroke
+            customEquipmentTimeout = setTimeout(() => {
+                generateExtractionName();
+            }, 300); // Wait 300ms after user stops typing
+        }
+
+        function closeModal() {
+            modal.style.display = 'none';
+            clearTempOverlay();
+            currentSelection = null;
+            currentOCRResult = null; // Clear stored OCR result
+            editingExtractionId = null; // Clear editing mode
+            
+            // Initialize search text state
+            initializeSearchText();
+            
+            // Clear current OCR result
+            currentOCRResult = null;
+            
+            // Set modal state and process any pending OCR
+            isModalOpen = false;
+            processPendingOCR();
+            
+            // Reset debug checkbox (with null check)
+            const debugCheckbox = document.getElementById('debug-ocr');
+            const debugDiv = document.getElementById('ocr-debug');
+            if (debugCheckbox) debugCheckbox.checked = false;
+            if (debugDiv) debugDiv.style.display = 'none';
+            
+            // Reset OCR table checkbox and completely clear OCR content (with null checks)
+            const ocrCheckbox = document.getElementById('enable-table-ocr');
+            const statusDiv = document.getElementById('table-ocr-status');
+            const markdownDiv = document.getElementById('markdown-output');
+            const configGroup = document.getElementById('ocr-config-group');
+            
+            if (ocrCheckbox) ocrCheckbox.checked = false;
+            if (statusDiv) {
+                statusDiv.innerHTML = '';
+                statusDiv.style.display = 'none';
+            }
+            if (markdownDiv) {
+                markdownDiv.innerHTML = '';
+                markdownDiv.style.display = 'none';
+            }
+            if (configGroup) configGroup.style.display = 'none';
+            
+            // Clear OCR preview
+            const previewContainer = document.getElementById('ocr-preview');
+            if (previewContainer) {
+                previewContainer.innerHTML = '';
+            }
+            
+            // Reset modal title
+            const modalTitle = document.querySelector('#schedule-modal h2');
+            if (modalTitle) {
+                modalTitle.textContent = 'Extract Schedule';
+            }
+            
+            // Clear form fields
+            document.getElementById('extraction-name').value = '';
+            document.getElementById('equipment-type').value = 'FANS';
+            document.getElementById('custom-equipment-type').value = '';
+            document.getElementById('custom-equipment-group').style.display = 'none';
+            document.getElementById('extraction-type').value = 'schedule';
+            document.getElementById('extraction-description').value = '';
+            document.getElementById('rfq-required').checked = false;
+        }
+
+        async function saveSchedule() {
+            const name = document.getElementById('extraction-name').value.trim();
+            const equipmentType = document.getElementById('equipment-type').value;
+            const customEquipmentType = document.getElementById('custom-equipment-type').value.trim().toUpperCase();
+            const extractionType = document.getElementById('extraction-type').value;
+            const description = document.getElementById('extraction-description').value.trim();
+            const rfqRequired = document.getElementById('rfq-required').checked;
+            
+            if (!name) {
+                alert('Please enter an extraction name');
+                return;
+            }
+            
+            // Determine final equipment type
+            let finalEquipmentType = equipmentType;
+            if (equipmentType === 'CUSTOM') {
+                if (!customEquipmentType) {
+                    alert('Please enter a custom equipment type');
+                    return;
+                }
+                finalEquipmentType = customEquipmentType;
+            }
+            
+            if (!currentSelection) {
+                alert('No selection found');
+                return;
+            }
+            
+            // Ensure selection has required properties
+            if (!currentSelection.page || typeof currentSelection.x !== 'number') {
+                alert('Invalid selection coordinates');
+                console.error('Invalid currentSelection:', currentSelection);
+                return;
+            }
+            
+            // Show loading message
+            setStatus('Extracting high-resolution image...');
+            
+            try {
+                // Extract image from PDF at high resolution
+                const imageData = await extractImageFromSelection(currentSelection);
+                
+                // Use OCR data from modal if available
+                const ocrData = currentOCRResult;
+
+                // Check if we're editing an existing extraction or creating a new one
+                if (editingExtractionId) {
+                    // Update existing extraction
+                    const existingIndex = extractions.findIndex(e => e.id === editingExtractionId);
+                    if (existingIndex !== -1) {
+                        const existing = extractions[existingIndex];
+                        
+                        // Update the extraction with new data
+                        extractions[existingIndex] = {
+                            ...existing, // Keep existing data like original timestamp, id
+                            extractionName: name,
+                            equipmentType: finalEquipmentType,
+                            extractionType: extractionType,
+                            description: description,
+                            rfqRequired: rfqRequired,
+                            coordinates: currentSelection,
+                            imageData: imageData,
+                            ocrData: ocrData !== null ? ocrData : existing.ocrData, // Use new OCR if provided, otherwise keep existing
+                            ocrStatus: ocrData ? 'completed' : (existing.ocrData ? 'completed' : 'none'),
+                            lastModified: new Date().toISOString()
+                        };
+                        
+                        setStatus(`${extractionType.charAt(0).toUpperCase() + extractionType.slice(1)} "${name}" updated successfully for ${finalEquipmentType}`);
+                    }
+                    
+                    // Clear editing mode
+                    editingExtractionId = null;
+                } else {
+                    // Create new extraction with simple UID
+                    const extraction = {
+                        id: generateExtractionUID(),
+                        legacyId: ++extractionCounter, // Keep legacy counter for compatibility
+                        extractionName: name,
+                        equipmentType: finalEquipmentType,
+                        extractionType: extractionType,
+                        description: description,
+                        rfqRequired: rfqRequired,
+                        coordinates: currentSelection,
+                        imageData: imageData,
+                        ocrData: ocrData,
+                        ocrStatus: ocrData ? 'completed' : 'none',
+                        timestamp: new Date().toISOString()
+                    };
+                    
+                    extractions.push(extraction);
+                    setStatus(`${extractionType.charAt(0).toUpperCase() + extractionType.slice(1)} "${name}" extracted successfully for ${finalEquipmentType}`);
+                }
+                
+                updateExtractionList();
+                saveToLocalStorage();
+                
+                // Update Extract All button state
+                extractAllBtn.disabled = extractions.length === 0;
+                
+                // Refresh the display to show the updated rectangle
+                restoreSelectionsForPage(currentPage);
+                
+                // Close modal immediately for smooth workflow
+                closeModal();
+                
+            } catch (error) {
+                console.error('Error saving schedule:', error);
+                setStatus('Error extracting schedule. Please try again.');
+            }
+        }
+
+        async function extractImageFromSelection(selection) {
+            try {
+                // Create a high-resolution extraction directly from PDF
+                const page = await currentPDF.getPage(selection.page);
+                const extractionScale = 3.0; // High resolution for extraction
+                const viewport = page.getViewport({ scale: extractionScale });
+                
+                // Create a temporary canvas for high-res rendering
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                // Set canvas size to full page at high resolution
+                tempCanvas.width = viewport.width;
+                tempCanvas.height = viewport.height;
+                
+                // Render the entire page at high resolution
+                const renderContext = {
+                    canvasContext: tempCtx,
+                    viewport: viewport
+                };
+                await page.render(renderContext).promise;
+                
+                // COORDINATE SYSTEM EXPLANATION:
+                // selection.x/y/width/height are normalized to PDF scale (1.0)
+                // To map to extraction scale (3.0), we multiply by 3.0
+                
+                const scaleFactor = extractionScale; // 3.0
+                
+                const extractX = selection.x * scaleFactor;
+                const extractY = selection.y * scaleFactor;
+                const extractWidth = selection.width * scaleFactor;
+                const extractHeight = selection.height * scaleFactor;
+                
+                console.log('Extraction debug:', {
+                    selectionCoords: selection,
+                    extractionScale,
+                    scaleFactor,
+                    extractCoords: { extractX, extractY, extractWidth, extractHeight },
+                    canvasSize: { width: tempCanvas.width, height: tempCanvas.height }
+                });
+                
+                // Ensure coordinates are within bounds
+                const boundedX = Math.max(0, Math.min(extractX, tempCanvas.width));
+                const boundedY = Math.max(0, Math.min(extractY, tempCanvas.height));
+                const boundedWidth = Math.min(extractWidth, tempCanvas.width - boundedX);
+                const boundedHeight = Math.min(extractHeight, tempCanvas.height - boundedY);
+                
+                if (boundedWidth <= 0 || boundedHeight <= 0) {
+                    console.error('Invalid extraction bounds:', { boundedX, boundedY, boundedWidth, boundedHeight });
+                    throw new Error('Invalid extraction coordinates');
+                }
+                
+                // Create final extraction canvas
+                const extractCanvas = document.createElement('canvas');
+                const extractCtx = extractCanvas.getContext('2d');
+                extractCanvas.width = boundedWidth;
+                extractCanvas.height = boundedHeight;
+                
+                // Extract the specific region at high resolution
+                const imageData = tempCtx.getImageData(boundedX, boundedY, boundedWidth, boundedHeight);
+                extractCtx.putImageData(imageData, 0, 0);
+                
+                // Convert to base64 data URL
+                return extractCanvas.toDataURL('image/png');
+                
+            } catch (error) {
+                console.error('Error extracting high-res image:', error);
+                // Fallback to canvas extraction if PDF extraction fails
+                return extractImageFromCanvas(selection);
+            }
+        }
+
+        function extractImageFromCanvas(selection) {
+            // Fallback method using current canvas
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            
+            const scaledCoords = scaleCoordinates(selection, currentZoom);
+            
+            tempCanvas.width = scaledCoords.width;
+            tempCanvas.height = scaledCoords.height;
+            
+            const imageData = ctx.getImageData(scaledCoords.x, scaledCoords.y, scaledCoords.width, scaledCoords.height);
+            tempCtx.putImageData(imageData, 0, 0);
+            
+            return tempCanvas.toDataURL('image/png');
+        }
+
+        function getExtractionTypeIcon(extractionType) {
+            const icons = {
+                'schedule': '📋',
+                'drawing': '📐',
+                'table': '📊',
+                'detail': '🔍',
+                'specification': '📄',
+                'other': '📎'
+            };
+            return icons[extractionType] || '📎';
+        }
+        
+        function getOCRStatusIcon(extraction) {
+            const ocrStatus = extraction.ocrStatus || 'none';
+            const hasOCRData = extraction.ocrData && extraction.ocrData.success;
+            
+            if (hasOCRData && ocrStatus === 'completed') {
+                return '✅'; // Green checkmark - OCR completed successfully
+            } else if (ocrStatus === 'processing') {
+                return '🕐'; // Clock - OCR processing in progress
+            } else if (ocrStatus === 'queued') {
+                return '⏳'; // Hourglass - OCR queued for processing
+            } else if (ocrStatus === 'failed') {
+                return '⚠️'; // Warning - OCR failed
+            } else {
+                return ''; // No OCR status icon
+            }
+        }
+        
+        function getRFQIcon(extraction) {
+            return extraction.rfqRequired ? '💰' : '';
+        }
+        
+        async function processBackgroundOCR(extractionId, imageData) {
+            try {
+                console.log(`Starting background OCR processing for: ${extractionId}`);
+                setStatus(`Processing OCR in background for extraction ${extractionId}...`);
+                
+                // Get OCR options
+                const providerSelect = document.getElementById('ocr-provider');
+                const apiKeyInput = document.getElementById('gemini-api-key');
+                
+                const options = {};
+                if (providerSelect && providerSelect.value !== 'auto') {
+                    options.provider = providerSelect.value;
+                    console.log(`Using OCR provider: ${options.provider}`);
+                }
+                if (apiKeyInput && apiKeyInput.value) {
+                    options.apiKey = apiKeyInput.value;
+                    console.log('API key provided for OCR');
+                }
+                
+                console.log('Calling OCR extraction...');
+                // Process with OCR module
+                const result = await window.OCRTableExtractor.extractTable(imageData, options);
+                console.log('OCR extraction completed, result:', result);
+                
+                // Find the extraction and update it
+                const extractionIndex = extractions.findIndex(e => e.id === extractionId);
+                if (extractionIndex !== -1) {
+                    if (result.success) {
+                        extractions[extractionIndex].ocrData = result;
+                        extractions[extractionIndex].ocrStatus = 'completed';
+                        setStatus(`OCR completed successfully for extraction ${extractionId}`);
+                    } else {
+                        extractions[extractionIndex].ocrStatus = 'failed';
+                        setStatus(`OCR failed for extraction ${extractionId}: ${result.error || 'Unknown error'}`);
+                    }
+                    
+                    // Update the display and save
+                    updateExtractionList();
+                    saveToLocalStorage();
+                }
+                
+            } catch (error) {
+                console.error('Background OCR failed:', error);
+                
+                // Update extraction status to failed
+                const extractionIndex = extractions.findIndex(e => e.id === extractionId);
+                if (extractionIndex !== -1) {
+                    extractions[extractionIndex].ocrStatus = 'failed';
+                    updateExtractionList();
+                    saveToLocalStorage();
+                }
+                
+                setStatus(`OCR failed for extraction ${extractionId}: ${error.message}`);
+            }
+        }
+
+        function updateExtractionList() {
+            console.time('Update Extraction List DOM');
+            
+            if (extractions.length === 0) {
+                extractionList.innerHTML = '<p style="color: #7f8c8d; font-style: italic;">No extractions saved yet</p>';
+                console.timeEnd('Update Extraction List DOM');
+                return;
+            }
+            
+            extractionList.innerHTML = '';
+            
+            // Performance optimization: limit rendering for very large lists
+            const maxDisplayItems = 100;
+            const itemsToDisplay = extractions.slice(0, maxDisplayItems);
+            
+            if (extractions.length > maxDisplayItems) {
+                const notice = document.createElement('div');
+                notice.style.cssText = 'padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; margin-bottom: 10px; font-size: 12px;';
+                notice.innerHTML = `⚠️ Showing first ${maxDisplayItems} of ${extractions.length} extractions for performance`;
+                extractionList.appendChild(notice);
+            }
+            
+            itemsToDisplay.forEach(extraction => {
+                const item = document.createElement('div');
+                item.className = 'extraction-item';
+                if (selectedExtractionId === extraction.id) {
+                    item.classList.add('selected');
+                }
+                
+                const extractionTypeIcon = getExtractionTypeIcon(extraction.extractionType || 'other');
+                const ocrStatusIcon = getOCRStatusIcon(extraction);
+                const rfqIcon = getRFQIcon(extraction);
+                
+                item.innerHTML = `
+                    <div class="extraction-title">
+                        ${extractionTypeIcon} ${extraction.extractionName || extraction.name}
+                        <span style="float: right;">
+                            ${rfqIcon}${rfqIcon ? ' ' : ''}${ocrStatusIcon}
+                        </span>
+                    </div>
+                    <div class="extraction-coords">
+                        Page ${extraction.coordinates?.page || 'Unknown'} • ${extraction.equipmentType || extraction.type || 'UNKNOWN'}
+                        ${extraction.description || extraction.notes ? ` • ${extraction.description || extraction.notes}` : ''}
+                    </div>
+                    <div style="margin-top: 5px;">
+                        <button class="btn" style="font-size: 12px; padding: 4px 8px; margin-right: 5px;" 
+                                onclick="event.stopPropagation(); editExtraction('${extraction.id}')">
+                            Edit
+                        </button>
+                        <button class="btn" style="font-size: 12px; padding: 4px 8px; margin-right: 5px;" 
+                                onclick="event.stopPropagation(); downloadImage('${extraction.id}')">
+                            Download
+                        </button>
+                        <button class="btn" style="font-size: 12px; padding: 4px 8px; margin-right: 5px; background: #e67e22;" 
+                                onclick="event.stopPropagation(); runOCRForExtraction('${extraction.id}')"
+                                ${extraction.ocrStatus === 'processing' ? 'disabled' : ''}>
+                            ${extraction.ocrStatus === 'processing' ? 'Processing...' : 'Run OCR'}
+                        </button>
+                        <button class="btn-secondary" style="font-size: 12px; padding: 4px 8px;" 
+                                onclick="event.stopPropagation(); deleteExtraction('${extraction.id}')">
+                            Delete
+                        </button>
+                    </div>
+                `;
+                
+                item.addEventListener('click', () => {
+                    selectExtraction(extraction.id);
+                    highlightExtraction(extraction);
+                });
+                
+                // Add hover highlighting
+                item.addEventListener('mouseenter', () => {
+                    highlightExtractionOnHover(extraction.id);
+                });
+                
+                item.addEventListener('mouseleave', () => {
+                    removeHoverHighlight(extraction.id);
+                });
+                
+                extractionList.appendChild(item);
+            });
+            
+            console.timeEnd('Update Extraction List DOM');
+        }
+
+        function highlightExtraction(extraction) {
+            // Navigate to the page if needed
+            if (extraction.coordinates && currentPage !== extraction.coordinates.page) {
+                currentPage = extraction.coordinates.page;
+                updatePageInfo();
+                renderPage(currentPage).then(() => {
+                    showExtractionHighlight(extraction);
+                });
+            } else {
+                showExtractionHighlight(extraction);
+            }
+        }
+
+        function showExtractionHighlight(extraction) {
+            if (!extraction.coordinates) {
+                console.warn('Cannot highlight extraction: missing coordinates');
+                return;
+            }
+            
+            clearTempOverlay();
+            const coords = extraction.coordinates;
+            const scaledCoords = scaleCoordinates(coords, currentZoom);
+            drawTempSelectionRect(scaledCoords.x, scaledCoords.y, scaledCoords.x + scaledCoords.width, scaledCoords.y + scaledCoords.height);
+            
+            // Remove highlight after 3 seconds
+            setTimeout(() => {
+                clearTempOverlay();
+            }, 3000);
+        }
+
+        function highlightExtractionOnHover(extractionId) {
+            // Only highlight if on the same page
+            const extraction = extractions.find(e => e.id === extractionId);
+            if (extraction && extraction.coordinates && extraction.coordinates.page === currentPage) {
+                const savedRect = savedOverlay.querySelector(`[data-extraction-id="${extractionId}"]`);
+                if (savedRect) {
+                    savedRect.style.borderColor = '#f39c12';
+                    savedRect.style.background = 'rgba(243, 156, 18, 0.2)';
+                    savedRect.style.borderWidth = '3px';
+                }
+            }
+        }
+
+        function removeHoverHighlight(extractionId) {
+            const extraction = extractions.find(e => e.id === extractionId);
+            if (extraction && extraction.coordinates && extraction.coordinates.page === currentPage) {
+                const savedRect = savedOverlay.querySelector(`[data-extraction-id="${extractionId}"]`);
+                if (savedRect) {
+                    // Reset to original equipment type colors
+                    savedRect.className = `saved-rect equipment-type-${extraction.type}`;
+                    if (selectedExtractionId === extractionId) {
+                        savedRect.classList.add('selected');
+                    }
+                    // Clear any inline styles that override the CSS classes
+                    savedRect.style.borderColor = '';
+                    savedRect.style.background = '';
+                    savedRect.style.borderWidth = '2px';
+                }
+            }
+        }
+
+        function downloadImage(extractionId) {
+            // Find extraction by ID
+            const extraction = extractions.find(e => e.id === extractionId);
+            if (!extraction) {
+                console.error('Extraction not found for download:', extractionId);
+                return;
+            }
+            
+            const link = document.createElement('a');
+            const name = extraction.extractionName || extraction.name;
+            const equipmentType = extraction.equipmentType || extraction.type || 'UNKNOWN';
+            link.download = `${equipmentType}_${name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_page${extraction.coordinates?.page || 'unknown'}.png`;
+            link.href = extraction.imageData;
+            link.click();
+        }
+
+        function selectExtraction(extractionId) {
+            selectedExtractionId = extractionId;
+            updateExtractionList();
+            // Refresh display to update selection highlighting
+            restoreSelectionsForPage(currentPage);
+        }
+
+        function editExtraction(extractionId) {
+            // Find the extraction to edit
+            const extraction = extractions.find(e => e.id === extractionId);
+            if (!extraction) {
+                alert('Extraction not found');
+                return;
+            }
+            
+            // Set editing mode
+            editingExtractionId = extractionId;
+            
+            // Navigate to the correct page if needed
+            if (extraction.coordinates && currentPage !== extraction.coordinates.page) {
+                currentPage = extraction.coordinates.page;
+                renderPage(currentPage).then(() => {
+                    // Continue with opening the modal after page is rendered
+                    openEditModal(extraction);
+                });
+            } else {
+                openEditModal(extraction);
+            }
+        }
+        
+        function openEditModal(extraction) {
+            // Set modal state
+            isModalOpen = true;
+            
+            // Set editing mode
+            editingExtractionId = extraction.id;
+            console.log('Editing extraction with ID:', editingExtractionId);
+            
+            // Set the current selection to the extraction's coordinates
+            currentSelection = extraction.coordinates;
+            
+            // Highlight the extraction area
+            highlightExtraction(extraction);
+            
+            // Pre-fill the modal with existing data
+            document.getElementById('extraction-name').value = extraction.extractionName || extraction.name || '';
+            document.getElementById('extraction-description').value = extraction.description || '';
+            
+            // Set equipment type
+            const equipmentSelect = document.getElementById('equipment-type');
+            const equipmentType = extraction.equipmentType || extraction.type || 'OTHER';
+            equipmentSelect.value = equipmentType;
+            handleEquipmentTypeChange(); // Update custom input if needed
+            
+            // Set extraction type
+            const extractionTypeSelect = document.getElementById('extraction-type');
+            extractionTypeSelect.value = extraction.extractionType || 'schedule';
+            
+            // Set RFQ Required
+            document.getElementById('rfq-required').checked = extraction.rfqRequired || false;
+            
+            // Clear any previous OCR data first and check for stored OCR for this UID
+            currentOCRResult = null;
+            
+            // Clear OCR UI elements completely - use innerHTML to clear all HTML content
+            document.getElementById('markdown-output').innerHTML = '';
+            document.getElementById('table-ocr-status').innerHTML = '';
+            document.getElementById('table-ocr-status').style.display = 'none';
+            document.getElementById('markdown-output').style.display = 'none';
+            document.getElementById('ocr-config-group').style.display = 'none';
+            document.getElementById('enable-table-ocr').checked = false;
+            
+            // Clear OCR preview container
+            const previewContainer = document.getElementById('ocr-preview');
+            if (previewContainer) {
+                previewContainer.innerHTML = '';
+            }
+            
+            // If there's existing OCR data, set it up properly
+            if (extraction.ocrData && extraction.ocrData.success) {
+                // Set the current OCR result to the existing data (read-only in modal)
+                currentOCRResult = extraction.ocrData;
+                
+                // Enable the OCR checkbox to show that OCR data exists
+                document.getElementById('enable-table-ocr').checked = true;
+                
+                // Show the OCR status and make config visible
+                document.getElementById('ocr-config-group').style.display = 'block';
+                document.getElementById('table-ocr-status').style.display = 'block';
+                
+                // Show existing OCR results in the status area
+                let statusText = `Existing OCR by ${extraction.ocrData.provider} (${extraction.ocrData.confidence}% confidence)`;
+                if (extraction.ocrData.tableData && extraction.ocrData.tableData.isTable) {
+                    const tableData = extraction.ocrData.tableData.tableData;
+                    statusText += ` - Table: ${tableData.rows} rows × ${tableData.columns} columns`;
+                }
+                
+                document.getElementById('table-ocr-status').innerHTML = `
+                    <div style="color: green; font-weight: bold;">✓ ${statusText}</div>
+                    <div style="margin-top: 5px; font-size: 12px; color: #666;">
+                        OCR data will be preserved when saving. Uncheck "Extract Table Info" to remove OCR data, or run new OCR to replace it.
+                    </div>
+                `;
+                
+                // Show the markdown output if available
+                if (extraction.ocrData.tableData && extraction.ocrData.tableData.isTable) {
+                    const tableData = extraction.ocrData.tableData.tableData;
+                    let markdownText = '';
+                    
+                    if (tableData.headers && tableData.data) {
+                        // Create markdown table
+                        markdownText = '| ' + tableData.headers.join(' | ') + ' |\n';
+                        markdownText += '| ' + tableData.headers.map(() => '---').join(' | ') + ' |\n';
+                        
+                        tableData.data.forEach(row => {
+                            markdownText += '| ' + row.join(' | ') + ' |\n';
+                        });
+                    } else if (extraction.ocrData.text) {
+                        markdownText = extraction.ocrData.text;
+                    }
+                    
+                    if (markdownText) {
+                        document.getElementById('markdown-output').textContent = markdownText;
+                        document.getElementById('markdown-output').style.display = 'block';
+                    }
+                }
+            }
+            
+            // Update modal title to indicate editing
+            const modalTitle = document.querySelector('#schedule-modal h2');
+            if (modalTitle) {
+                modalTitle.textContent = 'Edit Schedule Extraction';
+            }
+            
+            // Open the modal
+            document.getElementById('schedule-modal').style.display = 'block';
+        }
+
+        async function runOCRForExtraction(extractionId) {
+            // Find the extraction
+            const extraction = extractions.find(e => e.id === extractionId);
+            if (!extraction) {
+                alert('Extraction not found');
+                return;
+            }
+            
+            // Update status to processing
+            extraction.ocrStatus = 'processing';
+            updateExtractionList();
+            
+            try {
+                setStatus('Running OCR...');
+                
+                // Check if OCR is supported
+                if (!window.OCRTableExtractor || !window.OCRTableExtractor.isSupported()) {
+                    throw new Error('OCR functionality not available');
+                }
+                
+                // Get OCR options - use saved API key if available
+                const savedApiKey = localStorage.getItem('gemini-api-key');
+                const ocrOptions = {
+                    provider: savedApiKey ? 'gemini' : 'tesseract',
+                    apiKey: savedApiKey
+                };
+                
+                // Run OCR on the extraction's image
+                const result = await window.OCRTableExtractor.extractTable(extraction.imageData, ocrOptions);
+                
+                if (result.success) {
+                    // Update extraction with OCR results
+                    extraction.ocrData = result;
+                    extraction.ocrStatus = 'completed';
+                    setStatus(`OCR completed for ${extraction.extractionName}`);
+                } else {
+                    extraction.ocrStatus = 'failed';
+                    setStatus(`OCR failed: ${result.error || 'Unknown error'}`);
+                }
+                
+            } catch (error) {
+                extraction.ocrStatus = 'failed';
+                setStatus(`OCR failed: ${error.message}`);
+                console.error('OCR error:', error);
+            }
+            
+            // Update the UI and save
+            updateExtractionList();
+            saveToLocalStorage();
+        }
+
+        function deleteExtraction(extractionId) {
+            if (confirm('Are you sure you want to delete this schedule?')) {
+                extractions = extractions.filter(e => e.id !== extractionId);
+                if (selectedExtractionId === extractionId) {
+                    selectedExtractionId = null;
+                }
+                updateExtractionList();
+                saveToLocalStorage();
+                
+                // Update Extract All button state
+                extractAllBtn.disabled = extractions.length === 0;
+                
+                // Refresh the display to remove deleted rectangles
+                restoreSelectionsForPage(currentPage);
+                
+                setStatus('Schedule deleted successfully');
+            }
+        }
+
+        function showDeleteContextMenu(event, extractionId) {
+            // Simple confirmation for now - could be enhanced with custom context menu
+            deleteExtraction(extractionId);
+        }
+
+        function restoreSelectionsForPage(pageNum) {
+            // Clear saved overlay first to prevent duplicates
+            clearSavedOverlay();
+            
+            const pageExtractions = extractions.filter(e => e.coordinates && e.coordinates.page === pageNum);
+            pageExtractions.forEach(extraction => {
+                const coords = extraction.coordinates;
+                const selectionRect = document.createElement('div');
+                selectionRect.className = `saved-rect equipment-type-${extraction.type}`;
+                
+                // Scale coordinates based on current zoom
+                const scaledCoords = scaleCoordinates(coords, currentZoom);
+                selectionRect.style.left = scaledCoords.x + 'px';
+                selectionRect.style.top = scaledCoords.y + 'px';
+                selectionRect.style.width = scaledCoords.width + 'px';
+                selectionRect.style.height = scaledCoords.height + 'px';
+                selectionRect.title = `${extraction.name} (${extraction.type})`;
+                selectionRect.dataset.extractionId = extraction.id;
+                
+                // Add click handler for selection
+                selectionRect.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    selectExtraction(extraction.id);
+                });
+                
+                // Add right-click handler for deletion
+                selectionRect.addEventListener('contextmenu', function(e) {
+                    e.preventDefault();
+                    showDeleteContextMenu(e, extraction.id);
+                });
+                
+                // Update selection state
+                if (selectedExtractionId === extraction.id) {
+                    selectionRect.classList.add('selected');
+                }
+                
+                savedOverlay.appendChild(selectionRect);
+            });
+        }
+
+        function scaleCoordinates(coords, zoom) {
+            // coords are normalized to PDF scale (1.0)
+            // we need to convert to current display scale (1.5 * zoom)
+            const currentDisplayScale = 1.5 * zoom;
+            
+            return {
+                x: coords.x * currentDisplayScale,
+                y: coords.y * currentDisplayScale,
+                width: coords.width * currentDisplayScale,
+                height: coords.height * currentDisplayScale
+            };
+        }
+
+        function extractAllImages() {
+            if (extractions.length === 0) {
+                alert('No schedules to extract');
+                return;
+            }
+            
+            setStatus('Extracting all images...');
+            
+            extractions.forEach((extraction, index) => {
+                setTimeout(() => {
+                    downloadImage(extraction);
+                    if (index === extractions.length - 1) {
+                        setStatus(`All ${extractions.length} images extracted successfully`);
+                    }
+                }, index * 100); // Small delay between downloads
+            });
+        }
+
+        function clearAllSelections() {
+            if (confirm('Are you sure you want to clear all extracted schedules?')) {
+                extractions = [];
+                extractionCounter = 0;
+                selectedExtractionId = null;
+                updateExtractionList();
+                clearSavedOverlay();
+                clearTempOverlay();
+                localStorage.removeItem('pdfExtractorData');
+                setStatus('All selections cleared');
+            }
+        }
+
+        // Helper function to convert data URL to blob
+        async function dataURLToBlob(dataURL) {
+            const response = await fetch(dataURL);
+            return await response.blob();
+        }
+
+        // PDF-LIB Coordinate Transformation Utilities
+        function transformCoordinatesForPDFLib(coords, pageHeight) {
+            // Convert from Canvas coordinates (top-left origin) to PDF coordinates (bottom-left origin)
+            // coords are already normalized to PDF scale (1.0)
+            return {
+                x: coords.x,
+                y: pageHeight - coords.y - coords.height, // Flip Y coordinate
+                width: coords.width,
+                height: coords.height
+            };
+        }
+
+        function getEquipmentTypeColor(equipmentType) {
+            const colors = {
+                'FANS': { r: 0.16, g: 0.68, b: 0.38 },     // Green
+                'VAV': { r: 0.90, g: 0.49, b: 0.13 },      // Orange  
+                'GRD': { r: 0.61, g: 0.35, b: 0.71 },      // Purple
+                'RTU': { r: 0.16, g: 0.50, b: 0.73 },      // Blue
+                'AHU': { r: 0.89, g: 0.20, b: 0.29 },      // Red
+                'DUCTING': { r: 0.20, g: 0.59, b: 0.86 },  // Light Blue
+                'OTHER': { r: 0.58, g: 0.65, b: 0.65 },    // Gray
+                'UNKNOWN': { r: 0.58, g: 0.65, b: 0.65 }   // Gray
+            };
+            return colors[equipmentType] || colors['OTHER'];
+        }
+
+        // Create annotated PDF with extraction rectangles
+        async function createAnnotatedPDF(originalPdfData, extractionsData) {
+            try {
+                console.log('Creating annotated PDF with', extractionsData.length, 'extractions');
+                console.log('PDF data size:', originalPdfData.byteLength, 'bytes');
+                
+                // Load the original PDF directly - should work now with cloned buffer
+                const pdfDoc = await PDFLib.PDFDocument.load(originalPdfData);
+                console.log('PDF loaded successfully');
+                
+                // Get pages
+                const pages = pdfDoc.getPages();
+                
+                // Group extractions by page
+                const extractionsByPage = {};
+                extractionsData.forEach(extraction => {
+                    const pageNum = extraction.coordinates?.page || 1;
+                    if (!extractionsByPage[pageNum]) {
+                        extractionsByPage[pageNum] = [];
+                    }
+                    extractionsByPage[pageNum].push(extraction);
+                });
+                
+                // Add rectangles to each page
+                Object.entries(extractionsByPage).forEach(([pageNum, pageExtractions]) => {
+                    console.log(`Processing page ${pageNum} with ${pageExtractions.length} extractions`);
+                    const pageIndex = parseInt(pageNum) - 1; // Convert to 0-based index
+                    if (pageIndex < 0 || pageIndex >= pages.length) {
+                        console.warn(`Page ${pageNum} is out of range (0-${pages.length-1})`);
+                        return;
+                    }
+                    
+                    const page = pages[pageIndex];
+                    const pageHeight = page.getHeight();
+                    console.log(`Page ${pageNum} dimensions: ${page.getWidth()} x ${pageHeight}`);
+                    
+                    pageExtractions.forEach((extraction, index) => {
+                        // Transform coordinates for PDF-LIB
+                        const pdfCoords = transformCoordinatesForPDFLib(extraction.coordinates, pageHeight);
+                        
+                        // Get equipment type color
+                        const color = getEquipmentTypeColor(extraction.equipmentType || extraction.type || 'OTHER');
+                        
+                        // Create editable rectangle annotation (like BlueBeam)
+                        const extractionName = extraction.extractionName || extraction.name || 'Extraction';
+                        const equipmentType = extraction.equipmentType || extraction.type || 'OTHER';
+                        const extractionType = extraction.extractionType || 'extraction';
+                        
+                        // Build comprehensive annotation content
+                        const annotationContent = [
+                            `${extractionName}`,
+                            `Equipment: ${equipmentType}`,
+                            `Type: ${extractionType.toUpperCase()}`,
+                            extraction.description ? `Description: ${extraction.description}` : '',
+                            `Page: ${extraction.coordinates?.page || 'Unknown'}`,
+                            `Created: ${new Date(extraction.timestamp).toLocaleString()}`
+                        ].filter(line => line).join('\n');
+                        
+                        // Create rectangle annotation using PDF-LIB's annotation system
+                        try {
+                            const annotationRef = pdfDoc.context.nextRef();
+                            
+                            // Create annotation dictionary with fill
+                            const annotationDict = pdfDoc.context.obj({
+                                Type: 'Annot',
+                                Subtype: 'Square',
+                                Rect: [pdfCoords.x, pdfCoords.y, pdfCoords.x + pdfCoords.width, pdfCoords.y + pdfCoords.height],
+                                Contents: PDFLib.PDFString.of(annotationContent),
+                                T: PDFLib.PDFString.of(`${equipmentType}_${index + 1}`), // Title
+                                C: [color.r, color.g, color.b], // Border color
+                                IC: [color.r, color.g, color.b], // Interior (fill) color  
+                                CA: 0.8, // Border opacity
+                                ca: 0.1, // Fill opacity (matching web interface)
+                                Border: [0, 0, 2], // Border style [h-radius, v-radius, width]
+                                BS: pdfDoc.context.obj({
+                                    Type: 'Border',
+                                    W: 2, // Width
+                                    S: 'S' // Solid style
+                                }),
+                                F: 4, // Flags: Print (bit 3 = 4)
+                                M: PDFLib.PDFString.of(new Date().toISOString()), // Modification date
+                                NM: PDFLib.PDFString.of(`extraction_${extraction.id || index}`), // Unique name
+                                P: page.ref, // Parent page reference
+                                // Custom properties for construction data
+                                RC: PDFLib.PDFString.of(JSON.stringify({
+                                    extractionId: extraction.id,
+                                    equipmentType: equipmentType,
+                                    extractionType: extractionType,
+                                    coordinates: extraction.coordinates,
+                                    ocrData: extraction.ocrData ? {
+                                        provider: extraction.ocrData.provider,
+                                        confidence: extraction.ocrData.confidence
+                                    } : null
+                                }))
+                            });
+                            
+                            // Register the annotation
+                            pdfDoc.context.assign(annotationRef, annotationDict);
+                            
+                            // Add annotation to page
+                            const pageDict = pdfDoc.context.lookup(page.ref);
+                            const existingAnnots = pageDict.get(PDFLib.PDFName.of('Annots'));
+                            
+                            if (existingAnnots) {
+                                existingAnnots.push(annotationRef);
+                            } else {
+                                pageDict.set(PDFLib.PDFName.of('Annots'), pdfDoc.context.obj([annotationRef]));
+                            }
+                            
+                            console.log(`Created annotation for ${extractionName} at (${pdfCoords.x}, ${pdfCoords.y})`);
+                            
+                        } catch (annotationError) {
+                            console.warn('Failed to create annotation, falling back to drawn rectangle:', annotationError);
+                            
+                            // Fallback to drawn rectangle if annotation creation fails
+                            page.drawRectangle({
+                                x: pdfCoords.x,
+                                y: pdfCoords.y,
+                                width: pdfCoords.width,
+                                height: pdfCoords.height,
+                                borderColor: PDFLib.rgb(color.r, color.g, color.b),
+                                borderWidth: 2,
+                                color: PDFLib.rgb(color.r, color.g, color.b),
+                                opacity: 0.1
+                            });
+                        }
+                    });
+                });
+                
+                console.log('Adding document metadata...');
+                
+                // Add document metadata
+                pdfDoc.setTitle('Construction Schedule Extractions - Annotated PDF');
+                pdfDoc.setAuthor('PDF Schedule Extractor');
+                pdfDoc.setSubject(`${extractionsData.length} schedule extractions marked on construction drawings`);
+                pdfDoc.setCreator('PDF Schedule Extractor v2.0');
+                pdfDoc.setProducer('PDF-LIB');
+                
+                const equipmentTypesCount = {};
+                extractionsData.forEach(extraction => {
+                    const type = extraction.equipmentType || extraction.type || 'OTHER';
+                    equipmentTypesCount[type] = (equipmentTypesCount[type] || 0) + 1;
+                });
+                
+                const equipmentSummary = Object.entries(equipmentTypesCount)
+                    .map(([type, count]) => `${type}: ${count}`)
+                    .join(', ');
+                
+                const keywords = ['construction', 'schedules', 'extraction', ...Object.keys(equipmentTypesCount)];
+                console.log('Setting keywords:', keywords);
+                pdfDoc.setKeywords(keywords);
+                
+                // Add a summary comment
+                const totalPages = Object.keys(extractionsByPage).length;
+                const summary = `Annotated PDF created on ${new Date().toLocaleString()}. Contains ${extractionsData.length} extractions across ${totalPages} pages. Equipment breakdown: ${equipmentSummary}`;
+                console.log('Summary:', summary);
+                
+                console.log('Saving PDF...');
+                // Return the PDF bytes
+                const pdfBytes = await pdfDoc.save();
+                console.log('PDF saved successfully, size:', pdfBytes.length, 'bytes');
+                return pdfBytes;
+                
+            } catch (error) {
+                console.error('Error creating annotated PDF:', error);
+                throw new Error(`Failed to create annotated PDF: ${error.message}`);
+            }
+        }
+
+        // Helper function to create text file content
+        function createTextFile(extraction, equipmentType) {
+            const content = [];
+            content.push('='.repeat(60));
+            content.push(`EXTRACTION DETAILS`);
+            content.push('='.repeat(60));
+            content.push('');
+            content.push(`Extraction Name: ${extraction.extractionName}`);
+            content.push(`Equipment Type: ${equipmentType}`);
+            content.push(`Extraction Type: ${extraction.extractionType}`);
+            content.push(`Description: ${extraction.description || 'No description'}`);
+            content.push(`Page: ${extraction.coordinates?.page || 'Unknown'}`);
+            content.push(`Timestamp: ${extraction.timestamp}`);
+            content.push('');
+            
+            if (extraction.ocrData) {
+                content.push('-'.repeat(40));
+                content.push('OCR PROCESSING DETAILS');
+                content.push('-'.repeat(40));
+                content.push(`Provider: ${extraction.ocrData.provider || 'Unknown'}`);
+                content.push(`Confidence: ${extraction.ocrData.confidence || 0}%`);
+                content.push(`Table Detected: ${extraction.ocrData.tableData?.isTable ? 'Yes' : 'No'}`);
+                content.push('');
+                
+                content.push('-'.repeat(40));
+                content.push('EXTRACTED TEXT');
+                content.push('-'.repeat(40));
+                // Handle both old and new data structure formats
+                const rawText = extraction.ocrData.rawText || 
+                               extraction.ocrData.tableData?.rawText || 
+                               extraction.ocrData.text || 
+                               'No text extracted';
+                content.push(rawText);
+                content.push('');
+                
+                if (extraction.ocrData.markdown) {
+                    content.push('-'.repeat(40));
+                    content.push('TABLE DATA (MARKDOWN)');
+                    content.push('-'.repeat(40));
+                    content.push(extraction.ocrData.markdown);
+                }
+                
+                // Add notes section if available - handle both old and new data structure formats
+                const notes = extraction.ocrData.notes || extraction.ocrData.tableData?.notes;
+                if (notes && notes.hasNotes) {
+                    content.push('');
+                    content.push('-'.repeat(40));
+                    content.push('INSTALLATION NOTES & REQUIREMENTS');
+                    content.push('-'.repeat(40));
+                    content.push(`Total Notes: ${notes.count}`);
+                    content.push('');
+                    
+                    notes.entries.forEach((note, index) => {
+                        content.push(`${index + 1}. ${note.replace(/^\d+\)\s*/, '')}`);
+                    });
+                    content.push('');
+                }
+            } else {
+                content.push('No OCR data available for this extraction.');
+            }
+            
+            return content.join('\n');
+        }
+
+        // Helper function to create README file
+        function createReadmeFile(mainData) {
+            const content = [];
+            content.push('PDF SCHEDULE EXTRACTOR - EXPORT PACKAGE');
+            content.push('='.repeat(50));
+            content.push('');
+            content.push(`Project: ${mainData.project}`);
+            content.push(`Export Date: ${mainData.exportDate}`);
+            content.push(`Total Extractions: ${mainData.totalExtractions}`);
+            content.push(`Equipment Types: ${mainData.equipmentTypes.join(', ')}`);
+            content.push('');
+            content.push('FILE STRUCTURE:');
+            content.push('-'.repeat(30));
+            content.push('');
+            content.push('project_data.json     - Main project data (no images)');
+            content.push('README.txt           - This file');
+            content.push('');
+            
+            for (const equipmentType of mainData.equipmentTypes) {
+                const count = mainData.equipment[equipmentType].length;
+                content.push(`${equipmentType}/`);
+                content.push(`  └── ${count} extraction${count !== 1 ? 's' : ''} with PNG, JSON, and TXT files`);
+            }
+            
+            content.push('');
+            content.push('FILE TYPES:');
+            content.push('-'.repeat(20));
+            content.push('*.png      - High-resolution extracted images');
+            content.push('*_table.json - Detailed OCR results and table structure');
+            content.push('*_text.txt   - Human-readable extraction details');
+            content.push('');
+            content.push('Generated by PDF Schedule Extractor v2.0');
+            content.push(`https://github.com/anthropics/claude-code`);
+            
+            return content.join('\n');
+        }
+
+        async function exportExtractions() {
+            if (extractions.length === 0) {
+                alert('No extractions to export');
+                return;
+            }
+            
+            // Show progress indicator
+            setStatus('Preparing export files...');
+            
+            try {
+                // Create ZIP file
+                const zip = new JSZip();
+                
+                // Group extractions by equipment type
+                const equipmentGroups = {};
+                extractions.forEach(extraction => {
+                    const equipmentType = extraction.equipmentType || 'UNKNOWN';
+                    if (!equipmentGroups[equipmentType]) {
+                        equipmentGroups[equipmentType] = [];
+                    }
+                    equipmentGroups[equipmentType].push(extraction);
+                });
+                
+                // Create main JSON without image data
+                const mainData = {
+                    project: document.title || 'PDF Schedule Extractions',
+                    exportDate: new Date().toISOString(),
+                    totalExtractions: extractions.length,
+                    equipmentTypes: Object.keys(equipmentGroups),
+                    equipment: {}
+                };
+                
+                // Process each equipment type
+                for (const [equipmentType, groupExtractions] of Object.entries(equipmentGroups)) {
+                    setStatus(`Processing ${equipmentType} extractions...`);
+                    
+                    mainData.equipment[equipmentType] = [];
+                    
+                    for (const extraction of groupExtractions) {
+                        const safeName = extraction.extractionName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                        const pageNum = extraction.coordinates?.page || 'unknown';
+                        const baseFileName = `${safeName}_page${pageNum}`;
+                        
+                        // Create extraction metadata (NO image data)
+                        const extractionData = {
+                            id: extraction.id,
+                            extractionName: extraction.extractionName,
+                            extractionType: extraction.extractionType,
+                            description: extraction.description,
+                            coordinates: extraction.coordinates,
+                            ocrData: extraction.ocrData,
+                            files: {
+                                image: `${equipmentType}/${baseFileName}.png`,
+                                tableData: extraction.ocrData ? `${equipmentType}/${baseFileName}_table.json` : null,
+                                textData: extraction.ocrData ? `${equipmentType}/${baseFileName}_text.txt` : null
+                            },
+                            timestamp: extraction.timestamp
+                        };
+                        
+                        mainData.equipment[equipmentType].push(extractionData);
+                        
+                        // Add PNG image file to ZIP
+                        if (extraction.imageData) {
+                            const imageBlob = await dataURLToBlob(extraction.imageData);
+                            zip.file(`${equipmentType}/${baseFileName}.png`, imageBlob);
+                        }
+                        
+                        // Add table data JSON file if OCR data exists
+                        if (extraction.ocrData) {
+                            const tableDataStr = JSON.stringify(extraction.ocrData, null, 2);
+                            zip.file(`${equipmentType}/${baseFileName}_table.json`, tableDataStr);
+                            
+                            // Add text file with human-readable content
+                            const textContent = createTextFile(extraction, equipmentType);
+                            zip.file(`${equipmentType}/${baseFileName}_text.txt`, textContent);
+                        }
+                    }
+                }
+                
+                // Add main JSON file to ZIP
+                zip.file('project_data.json', JSON.stringify(mainData, null, 2));
+                
+                // Add README file
+                const readmeContent = createReadmeFile(mainData);
+                zip.file('README.txt', readmeContent);
+                
+                // Create annotated PDF if original PDF is available
+                if (currentPDFData && typeof PDFLib !== 'undefined') {
+                    try {
+                        setStatus('Creating annotated PDF...');
+                        
+                        // Create annotated PDF with all extractions
+                        const annotatedPdfBytes = await createAnnotatedPDF(currentPDFData, extractions);
+                        
+                        // Add annotated PDF to ZIP
+                        zip.file('annotated_construction_schedules.pdf', annotatedPdfBytes);
+                        
+                        setStatus('Annotated PDF created successfully...');
+                        
+                    } catch (error) {
+                        console.error('Error creating annotated PDF:', error);
+                        setStatus('Warning: Could not create annotated PDF, continuing with regular export...');
+                        // Continue with export even if annotated PDF fails
+                    }
+                }
+                
+                setStatus('Generating ZIP file...');
+                
+                // Generate ZIP and download
+                const zipBlob = await zip.generateAsync({ 
+                    type: 'blob',
+                    compression: 'DEFLATE',
+                    compressionOptions: { level: 6 }
+                });
+                
+                const link = document.createElement('a');
+                link.download = `construction_extractions_${new Date().toISOString().slice(0, 10)}.zip`;
+                link.href = URL.createObjectURL(zipBlob);
+                link.click();
+                
+                setStatus(`✓ Exported ${extractions.length} extractions as organized ZIP file`);
+                
+            } catch (error) {
+                console.error('Export error:', error);
+                setStatus('✗ Export failed. Please try again.');
+            }
+        }
+
+        function saveToLocalStorage() {
+            try {
+                const data = {
+                    extractions: extractions,
+                    counter: extractionCounter
+                };
+                localStorage.setItem('pdfExtractorData', JSON.stringify(data));
+            } catch (error) {
+                console.error('Error saving to localStorage:', error);
+            }
+        }
+
+        function loadFromLocalStorage() {
+            try {
+                console.time('localStorage Load');
+                const data = localStorage.getItem('pdfExtractorData');
+                console.log('localStorage data size:', data ? data.length : 0, 'characters');
+                
+                if (data) {
+                    console.time('JSON Parse');
+                    const parsed = JSON.parse(data);
+                    console.timeEnd('JSON Parse');
+                    
+                    extractions = parsed.extractions || [];
+                    extractionCounter = parsed.counter || 0;
+                    console.log('Loaded extractions:', extractions.length);
+                    
+                    console.time('Update Extraction List');
+                    updateExtractionList();
+                    console.timeEnd('Update Extraction List');
+                }
+                console.timeEnd('localStorage Load');
+            } catch (error) {
+                console.error('Error loading from localStorage:', error);
+            }
+        }
+
+        function setStatus(message) {
+            statusText.textContent = message;
+        }
+
+        // Load saved data asynchronously after page load to prevent blocking
+        setTimeout(() => {
+            console.log('Loading saved data asynchronously...');
+            loadFromLocalStorage();
+        }, 100);
+
+        // Test function for debugging PDF-LIB integration
+        window.testPDFLib = function() {
+            console.log('Testing PDF-LIB availability...');
+            console.log('PDFLib available:', typeof PDFLib !== 'undefined');
+            console.log('Current PDF loaded:', currentPDF !== null);
+            console.log('Current PDF data available:', currentPDFData !== null);
+            console.log('Current extractions:', extractions.length);
+            
+            if (typeof PDFLib !== 'undefined') {
+                console.log('PDF-LIB version:', PDFLib.version || 'Unknown');
+                console.log('Available methods:', Object.getOwnPropertyNames(PDFLib.PDFDocument.prototype).filter(name => name.startsWith('set')));
+            }
+            
+            return {
+                pdfLibLoaded: typeof PDFLib !== 'undefined',
+                pdfLoaded: currentPDF !== null,
+                pdfDataAvailable: currentPDFData !== null,
+                extractionCount: extractions.length
+            };
+        };
+
+        // Search Text Functionality
+        let currentSearches = [];
+        let currentSearchMatches = [];
+
+        function initializeSearchText() {
+            // Reset search state
+            currentSearches = [];
+            currentSearchMatches = [];
+            
+            // Clear UI
+            document.getElementById('search-input').value = '';
+            document.getElementById('search-results').style.display = 'none';
+            document.getElementById('search-list').innerHTML = '';
+            document.getElementById('matches-list').innerHTML = '';
+            
+        }
+
+        function addSearchTerm() {
+            const searchInput = document.getElementById('search-input');
+            const searchTerm = searchInput.value.trim();
+            
+            if (!searchTerm) {
+                return;
+            }
+            
+            // Check for duplicate
+            if (currentSearches.includes(searchTerm)) {
+                searchInput.value = '';
+                return;
+            }
+            
+            // Add search term
+            currentSearches.push(searchTerm);
+            searchInput.value = '';
+            
+            // Update UI
+            updateSearchList();
+            
+            // Show results container if not visible
+            document.getElementById('search-results').style.display = 'block';
+        }
+
+        function removeSearchTerm(searchTerm) {
+            currentSearches = currentSearches.filter(term => term !== searchTerm);
+            updateSearchList();
+            
+            // Hide results if no searches
+            if (currentSearches.length === 0) {
+                document.getElementById('search-results').style.display = 'none';
+            }
+        }
+
+        function updateSearchList() {
+            const searchList = document.getElementById('search-list');
+            
+            if (currentSearches.length === 0) {
+                searchList.innerHTML = '<div class="search-no-results">No search terms added</div>';
+                return;
+            }
+            
+            searchList.innerHTML = currentSearches.map(term => `
+                <div class="search-item">
+                    <span class="search-item-text">${escapeHtml(term)}</span>
+                    <button class="search-item-remove" onclick="removeSearchTerm('${escapeHtml(term)}')">×</button>
+                </div>
+            `).join('');
+        }
+
+        function performTextSearch() {
+            if (currentSearches.length === 0 || !currentSelection) {
+                return;
+            }
+            
+            currentSearchMatches = [];
+            
+            try {
+                // Search hierarchy: PDF text → OCR data → Run new OCR if needed
+                
+                // 1. Try PDF text layer first
+                const textItems = getTextItemsInSelection(currentSelection);
+                if (textItems && textItems.length > 0) {
+                    const fullText = textItems.map(item => item.text).join(' ');
+                    searchInText(fullText, 'PDF Text Layer');
+                }
+                
+                // 2. Try existing OCR data
+                if (currentOCRResult) {
+                    searchInOCRData(currentOCRResult);
+                }
+                
+                // 3. If no results and no OCR data, suggest running OCR
+                if (currentSearchMatches.length === 0 && !currentOCRResult) {
+                    displayNoResultsWithOCROption();
+                    return;
+                }
+                
+                displaySearchMatches(currentSearchMatches);
+                
+                
+            } catch (error) {
+                console.error('Search error:', error);
+                displaySearchMatches([]);
+            }
+        }
+
+        // Search in plain text (PDF text layer or OCR raw text)
+        function searchInText(fullText, source) {
+            currentSearches.forEach(searchTerm => {
+                const regex = new RegExp(escapeRegExp(searchTerm), 'gi');
+                let match;
+                
+                while ((match = regex.exec(fullText)) !== null) {
+                    currentSearchMatches.push({
+                        term: searchTerm,
+                        match: match[0],
+                        index: match.index,
+                        source: source,
+                        context: getContextAroundMatch(fullText, match.index, match[0].length)
+                    });
+                }
+            });
+        }
+
+        // Search in OCR data (raw text, table data, and notes)
+        function searchInOCRData(ocrResult) {
+            if (!ocrResult) return;
+            
+            // Search in raw text if available
+            if (ocrResult.text || ocrResult.rawText) {
+                const rawText = ocrResult.rawText || ocrResult.text || '';
+                searchInText(rawText, `OCR Text (${ocrResult.provider || 'Unknown'})`);
+            }
+            
+            // Search in table data if available
+            if (ocrResult.tableData && ocrResult.tableData.data) {
+                searchInTableData(ocrResult.tableData, `OCR Table (${ocrResult.provider || 'Unknown'})`);
+            }
+            
+            // Search in installation notes if available
+            if (ocrResult.notes && ocrResult.notes.entries) {
+                const notesText = ocrResult.notes.entries.join(' ');
+                searchInText(notesText, `OCR Notes (${ocrResult.provider || 'Unknown'})`);
+            }
+        }
+
+        // Search in structured table data
+        function searchInTableData(tableData, source) {
+            if (!tableData.headers || !tableData.data) return;
+            
+            const headers = tableData.headers;
+            
+            tableData.data.forEach((row, rowIndex) => {
+                row.forEach((cellValue, colIndex) => {
+                    currentSearches.forEach(searchTerm => {
+                        const regex = new RegExp(escapeRegExp(searchTerm), 'gi');
+                        if (regex.test(cellValue)) {
+                            const headerName = headers[colIndex] || `Column ${colIndex + 1}`;
+                            currentSearchMatches.push({
+                                term: searchTerm,
+                                match: cellValue,
+                                source: source,
+                                tableContext: {
+                                    row: rowIndex + 1,
+                                    column: headerName,
+                                    fullRow: row,
+                                    headers: headers
+                                },
+                                context: {
+                                    before: `${headerName}: `,
+                                    match: cellValue,
+                                    after: ` (Row ${rowIndex + 1})`,
+                                    truncatedStart: false,
+                                    truncatedEnd: false
+                                }
+                            });
+                        }
+                    });
+                });
+            });
+        }
+
+        // Show no results with OCR option
+        function displayNoResultsWithOCROption() {
+            const matchesList = document.getElementById('matches-list');
+            matchesList.innerHTML = `
+                <div class="search-no-results">
+                    <div style="margin-bottom: 10px;">No matches found in PDF text layer.</div>
+                    <div style="margin-bottom: 10px; font-size: 12px; color: #666;">
+                        This may be an image-based table. Try searching with OCR:
+                    </div>
+                    <button id="search-with-ocr-btn" class="btn" style="padding: 6px 12px; font-size: 12px;">
+                        Search with OCR
+                    </button>
+                </div>
+            `;
+            
+            // Add event listener for OCR search button
+            document.getElementById('search-with-ocr-btn').addEventListener('click', searchWithNewOCR);
+        }
+
+        // Run OCR on current selection and search results
+        async function searchWithNewOCR() {
+            if (!currentSelection) return;
+            
+            try {
+                setStatus('Running OCR for search...');
+                
+                // Extract image from current selection
+                const imageData = await extractImageFromSelection(currentSelection);
+                
+                // Get OCR configuration (with fallback defaults)
+                const ocrProvider = document.getElementById('ocr-provider')?.value || 'auto';
+                const apiKey = document.getElementById('gemini-api-key')?.value || '';
+                
+                // Show OCR config if Gemini is selected but no API key
+                if ((ocrProvider === 'auto' || ocrProvider === 'gemini') && !apiKey) {
+                    const useGemini = confirm('Gemini OCR provides better results but requires an API key.\n\nClick OK to use Gemini (you\'ll need to configure API key) or Cancel to use Tesseract (local processing).');
+                    if (useGemini) {
+                        // Enable OCR section to show configuration
+                        const ocrConfigGroup = document.getElementById('ocr-config-group');
+                        if (ocrConfigGroup) {
+                            ocrConfigGroup.style.display = 'block';
+                        }
+                        setStatus('Please configure OCR settings and try again');
+                        return;
+                    }
+                }
+                
+                // Run OCR
+                const ocrResult = await window.OCRTableExtractor.extractTable(imageData, {
+                    provider: ocrProvider === 'auto' ? undefined : ocrProvider,
+                    apiKey: apiKey
+                });
+                
+                if (ocrResult.success) {
+                    // Store OCR result for future searches
+                    currentOCRResult = ocrResult;
+                    
+                    // Clear previous matches and search in new OCR data
+                    currentSearchMatches = [];
+                    searchInOCRData(ocrResult);
+                    displaySearchMatches(currentSearchMatches);
+                    
+                    setStatus(`OCR search completed using ${ocrResult.provider || 'OCR'}`);
+                } else {
+                    setStatus('OCR search failed: ' + (ocrResult.error || 'Unknown error'));
+                    displaySearchMatches([]);
+                }
+                
+            } catch (error) {
+                console.error('OCR search error:', error);
+                setStatus('OCR search failed: ' + error.message);
+                displaySearchMatches([]);
+            }
+        }
+
+        function getContextAroundMatch(text, index, matchLength) {
+            const contextLength = 30;
+            const start = Math.max(0, index - contextLength);
+            const end = Math.min(text.length, index + matchLength + contextLength);
+            
+            const before = text.substring(start, index);
+            const match = text.substring(index, index + matchLength);
+            const after = text.substring(index + matchLength, end);
+            
+            return {
+                before: before,
+                match: match,
+                after: after,
+                truncatedStart: start > 0,
+                truncatedEnd: end < text.length
+            };
+        }
+
+        function displaySearchMatches(matches) {
+            const matchesList = document.getElementById('matches-list');
+            
+            if (matches.length === 0) {
+                matchesList.innerHTML = '<div class="search-no-results">No matches found in selection</div>';
+                return;
+            }
+            
+            // Group matches by term
+            const groupedMatches = {};
+            matches.forEach(match => {
+                if (!groupedMatches[match.term]) {
+                    groupedMatches[match.term] = [];
+                }
+                groupedMatches[match.term].push(match);
+            });
+            
+            matchesList.innerHTML = Object.entries(groupedMatches).map(([term, termMatches]) => `
+                <div style="margin-bottom: 8px;">
+                    <div style="font-weight: 600; font-size: 12px; color: #2c3e50; margin-bottom: 3px;">
+                        "${term}" (${termMatches.length} match${termMatches.length !== 1 ? 'es' : ''})
+                    </div>
+                    ${termMatches.map(match => `
+                        <div class="search-match">
+                            ${match.source ? `<div style="font-size: 10px; color: #7f8c8d; margin-bottom: 2px;">📍 ${match.source}</div>` : ''}
+                            ${match.tableContext ? 
+                                `<div style="font-size: 11px; color: #e67e22; margin-bottom: 2px;">📊 Table: ${match.tableContext.column}</div>` : ''
+                            }
+                            ${match.context.truncatedStart ? '...' : ''}${escapeHtml(match.context.before)}<span class="search-match-highlight">${escapeHtml(match.context.match)}</span>${escapeHtml(match.context.after)}${match.context.truncatedEnd ? '...' : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            `).join('');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(event) {
+            if (event.ctrlKey || event.metaKey) {
+                switch(event.key) {
+                    case 'o':
+                        event.preventDefault();
+                        pdfInput.click();
+                        break;
+                    case 'e':
+                        event.preventDefault();
+                        exportExtractions();
+                        break;
+                }
+            }
+            
+            // Page navigation
+            if (currentPDF) {
+                switch(event.key) {
+                    case 'ArrowLeft':
+                        if (currentPage > 1) changePage(-1);
+                        break;
+                    case 'ArrowRight':
+                        if (currentPage < totalPages) changePage(1);
+                        break;
+                    case 'Escape':
+                        closeModal();
+                        break;
+                }
+            }
+        });
+    </script>
+</body>
+</html>
