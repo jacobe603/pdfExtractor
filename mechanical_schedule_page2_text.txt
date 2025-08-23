@@ -1,0 +1,29 @@
+============================================================
+EXTRACTION DETAILS
+============================================================
+
+Extraction Name: MECHANICAL SCHEDULE
+Equipment Type: RTU
+Extraction Type: schedule
+Description: No description
+Page: 2
+Timestamp: 2025-07-11T12:36:22.455Z
+
+----------------------------------------
+OCR PROCESSING DETAILS
+----------------------------------------
+Provider: Google Gemini
+Confidence: 95%
+Table Detected: Yes
+
+----------------------------------------
+EXTRACTED TEXT
+----------------------------------------
+No text extracted
+
+----------------------------------------
+TABLE DATA (MARKDOWN)
+----------------------------------------
+| ROOFTOP UNIT ID | DISCHARGE ORIENTATION | OA CFM | SUPPLY CFM | SUPPLY ESP (INCH) | SUPPLY QTY/HP | SUPPLY DRIVE | SUPPLY VFD | EXHAUST CFM | EXHAUST ESP (INCH) | EXHAUST QTY/HP | EXHAUST DRIVE | EXHAUST VFD | FUEL | INPUT MBH | OUTPUT MBH | STAGES | EAT °F (DB/WB) | LAT °F (DB/WB) | SENSIBLE MBH | TOTAL MBH | IEER | VOLTAGE/PHASE | MCA | MOCP | MIN SCCR (kA) | FILTER TYPE | WEIGHT (LBS) | MANUFACTURER & MODEL | NOTES |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| RTU-1 | VERTICAL | 1,500 | 15,300 | 2 | 2/10 | D | Y | 15,300 | 0.5 | 2/7.5 | D | Y | NG | 600 | 486 | MOD | 80/66 | 53/53 | 425 | 573 | 15.1 | 208/3 | 310 | 350 | 20 | MERV8 | 8,500 | VALENT VX-312-50K-O-G2 | 1,2,3,4,5,6,7,8,9,10,11 |
