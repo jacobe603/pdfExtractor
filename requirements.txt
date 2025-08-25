@@ -19,6 +19,11 @@ PyPDF2>=3.0.0
 Pillow>=10.0.0
 opencv-python>=4.8.0
 
+# BlueBeam Spaces support
+PyMuPDF>=1.23.0
+Flask>=2.3.0
+flask-cors>=4.0.0
+
 # System dependencies:
 # Ubuntu/Debian: 
 #   sudo apt-get install ghostscript python3-tk tesseract-ocr poppler-utils

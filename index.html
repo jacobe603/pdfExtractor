@@ -16,6 +16,9 @@
     
     <!-- PDF Annotation Support -->
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+    
+    <!-- BlueBeam Spaces Support -->
+    <script src="bluebeam-spaces.js"></script>
     <style>
         * {
             margin: 0;
@@ -460,6 +463,8 @@
         <div class="controls">
             <button class="btn" id="clear-selections" disabled>Clear All</button>
             <button class="btn" id="export-data" disabled>Export ZIP Package</button>
+            <button class="btn" id="detect-spaces" style="background: #3498db;">🔍 Detect Spaces</button>
+            <button class="btn" id="toggle-spaces" style="background: #2ecc71; display: none;">👁️ Hide Spaces</button>
             <label style="font-size: 12px; color: #ecf0f1; margin-left: 10px;">
                 <input type="checkbox" id="enable-text-extraction" checked style="margin-right: 5px;">
                 Text Extraction
@@ -498,6 +503,17 @@
             </div>
             <div class="extraction-list" id="extraction-list">
                 <p style="color: #7f8c8d; font-style: italic;">No schedules extracted yet</p>
+            </div>
+            
+            <div id="spaces-section" style="display: none; margin-top: 20px; border-top: 1px solid #34495e; padding-top: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3 style="margin: 0;">🔷 BlueBeam Spaces</h3>
+                    <span id="spaces-count" style="font-size: 12px; color: #95a5a6;">0 spaces</span>
+                </div>
+                <div id="spaces-stats" style="font-size: 12px; color: #95a5a6; margin-bottom: 10px;"></div>
+                <div class="extraction-list" id="spaces-list">
+                    <p style="color: #7f8c8d; font-style: italic;">No spaces detected</p>
+                </div>
             </div>
         </div>
     </div>
@@ -627,6 +643,9 @@
         let totalPages = 0;
         let canvas = null;
         let ctx = null;
+        
+        // BlueBeam Spaces Manager
+        let spaceManager = null;
         let isSelecting = false;
         let startX = 0;
         let startY = 0;
@@ -700,6 +719,144 @@
         let clearSelectionsBtn, exportDataBtn, extractAllBtn;
         let zoomInBtn, zoomOutBtn, zoomLevelSpan;
 
+        // BlueBeam Spaces Functions
+        async function detectBlueBeamSpaces() {
+            if (!currentPDF) {
+                alert('Please load a PDF first');
+                return;
+            }
+            
+            setStatus('Detecting BlueBeam Spaces...');
+            
+            try {
+                // Use the current PDF file if available
+                const pdfFile = pdfInput.files[0];
+                const result = await spaceManager.detectSpaces(pdfFile);
+                
+                // Update UI
+                const spacesSection = document.getElementById('spaces-section');
+                const spacesList = document.getElementById('spaces-list');
+                const spacesCount = document.getElementById('spaces-count');
+                const toggleBtn = document.getElementById('toggle-spaces');
+                
+                if (result.total_spaces > 0) {
+                    spacesSection.style.display = 'block';
+                    toggleBtn.style.display = 'inline-block';
+                    spacesCount.textContent = `${result.total_spaces} space${result.total_spaces !== 1 ? 's' : ''}`;
+                    
+                    // Update spaces list
+                    updateSpacesList(result.spaces);
+                    
+                    // Render spaces for current page
+                    const pageInfo = result.pages[currentPage - 1];
+                    const pageHeight = pageInfo?.height || 792;
+                    const pageWidth = pageInfo?.width || 612;
+                    const rotation = pageInfo?.rotation || 0;
+                    spaceManager.renderSpacesForPage(currentPage - 1, currentZoom, pageHeight, pageWidth, rotation);
+                    
+                    setStatus(`Detected ${result.total_spaces} BlueBeam Space${result.total_spaces !== 1 ? 's' : ''}`);
+                } else {
+                    setStatus('No BlueBeam Spaces found in this PDF');
+                }
+            } catch (error) {
+                console.error('Error detecting spaces:', error);
+                setStatus('Error detecting spaces: ' + error.message);
+            }
+        }
+        
+        function updateSpacesList(spaces) {
+            const spacesList = document.getElementById('spaces-list');
+            
+            if (!spaces || spaces.length === 0) {
+                spacesList.innerHTML = '<p style="color: #7f8c8d; font-style: italic;">No spaces detected</p>';
+                return;
+            }
+            
+            // Group spaces by page
+            const spacesByPage = {};
+            spaces.forEach(space => {
+                const pageNum = space.page_number;
+                if (!spacesByPage[pageNum]) {
+                    spacesByPage[pageNum] = [];
+                }
+                spacesByPage[pageNum].push(space);
+            });
+            
+            // Create HTML for spaces list
+            let html = '';
+            Object.keys(spacesByPage).sort((a, b) => parseInt(a) - parseInt(b)).forEach(pageNum => {
+                const pageSpaces = spacesByPage[pageNum];
+                html += `<div style="margin-bottom: 15px;">`;
+                html += `<div style="font-weight: bold; color: #ecf0f1; margin-bottom: 5px;">Page ${parseInt(pageNum) + 1}</div>`;
+                
+                pageSpaces.forEach(space => {
+                    const r = Math.round(space.color[0] * 255);
+                    const g = Math.round(space.color[1] * 255);
+                    const b = Math.round(space.color[2] * 255);
+                    
+                    html += `
+                        <div class="space-item" data-space-id="${space.xref}" data-page="${space.page_number}" 
+                             style="padding: 8px; margin: 5px 0; background: #34495e; border-radius: 4px; cursor: pointer;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div style="width: 20px; height: 20px; background: rgb(${r}, ${g}, ${b}); 
+                                            opacity: ${space.opacity}; border-radius: 3px;"></div>
+                                <div style="flex: 1;">
+                                    <div style="font-size: 14px; color: #ecf0f1;">${space.title}</div>
+                                    <div style="font-size: 11px; color: #95a5a6;">
+                                        Area: ${Math.round(space.area)} sq pts
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                html += `</div>`;
+            });
+            
+            spacesList.innerHTML = html;
+            
+            // Add click handlers to space items
+            spacesList.querySelectorAll('.space-item').forEach(item => {
+                item.addEventListener('click', function() {
+                    const spaceId = parseInt(this.dataset.spaceId);
+                    const pageNum = parseInt(this.dataset.page);
+                    goToSpacePage(pageNum);
+                });
+            });
+        }
+        
+        function goToSpacePage(pageNum) {
+            if (currentPage !== pageNum + 1) {
+                currentPage = pageNum + 1;
+                updatePageInfo();
+                renderPage(currentPage).then(() => {
+                    // Re-render spaces after page change
+                    if (spaceManager && spaceManager.getAllSpaces().length > 0) {
+                        const pageInfo = spaceManager.pageInfo[pageNum];
+                        const pageHeight = pageInfo?.height || 792;
+                        const pageWidth = pageInfo?.width || 612;
+                        const rotation = pageInfo?.rotation || 0;
+                        spaceManager.renderSpacesForPage(pageNum, currentZoom, pageHeight, pageWidth, rotation);
+                    }
+                });
+            }
+        }
+        
+        function toggleSpacesVisibility() {
+            const toggleBtn = document.getElementById('toggle-spaces');
+            const isVisible = toggleBtn.textContent.includes('Hide');
+            
+            spaceManager.setSpacesVisible(!isVisible);
+            toggleBtn.innerHTML = isVisible ? '👁️ Show Spaces' : '👁️ Hide Spaces';
+        }
+        
+        function handleSpaceClick(event) {
+            const space = event.detail;
+            console.log('Space clicked:', space);
+            // Could add additional functionality here like editing or highlighting
+        }
+        
         // Initialize
         document.addEventListener('DOMContentLoaded', function() {
             // Initialize DOM elements
@@ -725,6 +882,11 @@
             
             canvas = pdfCanvas;
             ctx = canvas.getContext('2d');
+            
+            // Initialize BlueBeam Space Manager
+            spaceManager = new BlueBeamSpaceManager();
+            spaceManager.init();
+            
             setupEventListeners();
         });
 
@@ -756,6 +918,13 @@
             
             // Mouse wheel zoom
             canvas.addEventListener('wheel', handleMouseWheel, { passive: false });
+            
+            // BlueBeam Spaces buttons
+            document.getElementById('detect-spaces').addEventListener('click', detectBlueBeamSpaces);
+            document.getElementById('toggle-spaces').addEventListener('click', toggleSpacesVisibility);
+            
+            // Listen for space click events
+            document.addEventListener('spaceClicked', handleSpaceClick);
             
             // Modal event listeners
             document.getElementById('modal-cancel').addEventListener('click', closeModal);
@@ -913,6 +1082,15 @@
                 // Restore selections for this page
                 restoreSelectionsForPage(pageNum);
                 console.timeEnd(`Page ${pageNum} Restore Selections`);
+                
+                // Render BlueBeam Spaces if they have been detected
+                if (spaceManager && spaceManager.getAllSpaces().length > 0) {
+                    const pageInfo = spaceManager.pageInfo[pageNum - 1];
+                    const pageHeight = pageInfo?.height || viewport.height / (1.5 * currentZoom);
+                    const pageWidth = pageInfo?.width || viewport.width / (1.5 * currentZoom);
+                    const rotation = pageInfo?.rotation || 0;
+                    spaceManager.renderSpacesForPage(pageNum - 1, currentZoom, pageHeight, pageWidth, rotation);
+                }
                 
                 console.timeEnd(`Page ${pageNum} Render Total`);
                 setStatus(`Page ${pageNum} rendered. Click and drag to select schedule areas.`);
