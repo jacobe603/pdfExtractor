@@ -1,0 +1,46 @@
+{
+  "equipmentTypes": [
+    {"value": "FANS", "label": "FANS (Fan Equipment)"},
+    {"value": "VAV", "label": "VAV (Variable Air Volume)"},
+    {"value": "RTU", "label": "RTU (Roof Top Units)"},
+    {"value": "AHU", "label": "AHU (Air Handling Units)"},
+    {"value": "GRD", "label": "GRD (Grilles/Registers/Diffusers)"},
+    {"value": "DUCTING", "label": "DUCTING (Ductwork)"},
+    {"value": "OTHER", "label": "OTHER (Other Equipment)"},
+    {"value": "CUSTOM", "label": "CUSTOM (User Defined)"}
+  ],
+  "extractionTypes": [
+    {"value": "schedule", "label": "Schedule"},
+    {"value": "drawing", "label": "Drawing"},
+    {"value": "table", "label": "Table"},
+    {"value": "detail", "label": "Detail"},
+    {"value": "specification", "label": "Specification"},
+    {"value": "other", "label": "Other"}
+  ],
+  "defaultSettings": {
+    "defaultEquipmentType": "FANS",
+    "defaultExtractionType": "schedule",
+    "enableTextExtraction": true,
+    "autoRunOCR": false,
+    "ocrProvider": "auto",
+    "defaultZoomLevel": 1.0
+  },
+  "searchPresets": [
+    "CFM",
+    "HP",
+    "RPM",
+    "VOLTAGE",
+    "PHASE",
+    "MODEL",
+    "MCA",
+    "MOP",
+    "MOTOR",
+    "STATIC",
+    "TAG"
+  ],
+  "apiSettings": {
+    "geminiModel": "gemini-2.0-flash-exp",
+    "tesseractLang": "eng"
+  },
+  "version": "1.0.0"
+}

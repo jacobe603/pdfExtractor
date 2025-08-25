@@ -16,6 +16,7 @@ class BlueBeamSpaceManager {
         this.currentZoom = 1.0;
         this.pageHeight = 792; // Default page height in points
         this.pageInfo = {};
+        this.importedSpaces = new Set(); // Track which spaces have been imported
     }
 
     /**
@@ -240,10 +241,20 @@ class BlueBeamSpaceManager {
         overlay.dataset.spaceId = space.xref;
         overlay.dataset.spaceTitle = space.title;
         
+        // Check if this space has been imported
+        const isImported = this.importedSpaces.has(space.xref);
+        
         // Convert color from 0-1 range to 0-255
-        const r = Math.round(space.color[0] * 255);
-        const g = Math.round(space.color[1] * 255);
-        const b = Math.round(space.color[2] * 255);
+        let r = Math.round(space.color[0] * 255);
+        let g = Math.round(space.color[1] * 255);
+        let b = Math.round(space.color[2] * 255);
+        
+        // If imported, use a different color (green tint)
+        if (isImported) {
+            r = Math.min(255, r * 0.5);
+            g = Math.min(255, g + 100);
+            b = Math.min(255, b * 0.5);
+        }
         
         // Style the overlay
         overlay.style.cssText = `
@@ -252,12 +263,34 @@ class BlueBeamSpaceManager {
             top: ${bbox.y}px;
             width: ${bbox.width}px;
             height: ${bbox.height}px;
-            background-color: rgba(${r}, ${g}, ${b}, ${space.opacity * 0.3});
-            border: 2px solid rgba(${r}, ${g}, ${b}, ${space.opacity});
+            background-color: rgba(${r}, ${g}, ${b}, ${isImported ? 0.15 : space.opacity * 0.3});
+            border: 2px ${isImported ? 'dashed' : 'solid'} rgba(${r}, ${g}, ${b}, ${space.opacity});
             pointer-events: auto;
             cursor: pointer;
             z-index: 99;
         `;
+        
+        // Add checkmark icon if imported
+        if (isImported) {
+            const checkmark = document.createElement('div');
+            checkmark.style.cssText = `
+                position: absolute;
+                top: 2px;
+                right: 2px;
+                width: 20px;
+                height: 20px;
+                background: rgba(46, 204, 113, 0.9);
+                border-radius: 50%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 14px;
+                color: white;
+                pointer-events: none;
+            `;
+            checkmark.textContent = '✓';
+            overlay.appendChild(checkmark);
+        }
         
         // Add hover effect
         overlay.addEventListener('mouseenter', (e) => {
@@ -292,6 +325,8 @@ class BlueBeamSpaceManager {
         // Remove existing tooltip
         this.hideSpaceTooltip();
         
+        const isImported = this.importedSpaces.has(space.xref);
+        
         const tooltip = document.createElement('div');
         tooltip.id = 'space-tooltip';
         tooltip.style.cssText = `
@@ -307,7 +342,7 @@ class BlueBeamSpaceManager {
             pointer-events: none;
             white-space: nowrap;
         `;
-        tooltip.textContent = `${space.title} (Page ${space.page_number + 1})`;
+        tooltip.textContent = `${space.title} (Page ${space.page_number + 1})${isImported ? ' ✓ Imported' : ''}`;
         document.body.appendChild(tooltip);
     }
 

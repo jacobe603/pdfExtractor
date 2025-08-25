@@ -19,6 +19,9 @@
     
     <!-- BlueBeam Spaces Support -->
     <script src="bluebeam-spaces.js"></script>
+    
+    <!-- Settings Manager -->
+    <script src="settings-manager.js"></script>
     <style>
         * {
             margin: 0;
@@ -450,6 +453,60 @@
             text-align: center;
             padding: 10px;
         }
+        
+        /* Progress Modal Styles */
+        .progress-container {
+            margin: 20px 0;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background-color: #f0f0f0;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3498db, #2ecc71);
+            border-radius: 15px;
+            width: 0%;
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+        
+        .progress-text {
+            text-align: center;
+            margin-top: 10px;
+            color: #555;
+            font-size: 14px;
+        }
+        
+        .progress-spinner {
+            display: flex;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f0f0f0;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
 
     </style>
 </head>
@@ -462,9 +519,12 @@
         </div>
         <div class="controls">
             <button class="btn" id="clear-selections" disabled>Clear All</button>
+            <button class="btn" id="delete-all-extractions" style="background: #e74c3c; display: none;">🗑️ Delete All</button>
             <button class="btn" id="export-data" disabled>Export ZIP Package</button>
             <button class="btn" id="detect-spaces" style="background: #3498db;">🔍 Detect Spaces</button>
+            <button class="btn" id="import-all-spaces" style="background: #9b59b6; display: none;">📥 Import All Spaces</button>
             <button class="btn" id="toggle-spaces" style="background: #2ecc71; display: none;">👁️ Hide Spaces</button>
+            <button class="btn" id="open-settings" style="background: #95a5a6; margin-left: auto;">⚙️ Settings</button>
             <label style="font-size: 12px; color: #ecf0f1; margin-left: 10px;">
                 <input type="checkbox" id="enable-text-extraction" checked style="margin-right: 5px;">
                 Text Extraction
@@ -631,6 +691,112 @@
             </div>
         </div>
     </div>
+    
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content" style="width: 600px; max-height: 80vh; overflow-y: auto;">
+            <h3>⚙️ Settings</h3>
+            
+            <!-- Equipment Types Section -->
+            <div class="form-group">
+                <label style="font-weight: bold; margin-bottom: 10px; display: block;">Equipment Types</label>
+                <div id="equipment-types-list" style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px;">
+                    <!-- Will be populated dynamically -->
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="new-equipment-value" placeholder="Value (e.g., PUMP)" style="flex: 1;">
+                    <input type="text" id="new-equipment-label" placeholder="Label (e.g., Pumps)" style="flex: 2;">
+                    <button class="btn" onclick="addEquipmentType()" style="padding: 5px 10px;">Add</button>
+                </div>
+            </div>
+            
+            <!-- Search Presets Section -->
+            <div class="form-group">
+                <label style="font-weight: bold; margin-bottom: 10px; display: block;">Search Term Presets</label>
+                <div id="search-presets-list" style="max-height: 150px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px;">
+                    <!-- Will be populated dynamically -->
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="new-search-preset" placeholder="Add search preset (e.g., VOLTAGE)" style="flex: 1;">
+                    <button class="btn" onclick="addSearchPreset()" style="padding: 5px 10px;">Add</button>
+                </div>
+            </div>
+            
+            <!-- Default Settings Section -->
+            <div class="form-group">
+                <label style="font-weight: bold; margin-bottom: 10px; display: block;">Default Settings</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div>
+                        <label for="default-equipment-type">Default Equipment Type:</label>
+                        <select id="default-equipment-type" style="width: 100%;">
+                            <!-- Will be populated dynamically -->
+                        </select>
+                    </div>
+                    <div>
+                        <label for="default-extraction-type">Default Extraction Type:</label>
+                        <select id="default-extraction-type" style="width: 100%;">
+                            <!-- Will be populated dynamically -->
+                        </select>
+                    </div>
+                    <div>
+                        <label for="default-ocr-provider">Default OCR Provider:</label>
+                        <select id="default-ocr-provider" style="width: 100%;">
+                            <option value="auto">Auto-detect</option>
+                            <option value="gemini">Google Gemini</option>
+                            <option value="tesseract">Tesseract.js</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>
+                            <input type="checkbox" id="default-auto-ocr">
+                            Auto-run OCR on save
+                        </label>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- API Settings Section -->
+            <div class="form-group">
+                <label style="font-weight: bold; margin-bottom: 10px; display: block;">API Configuration</label>
+                <div>
+                    <label for="settings-gemini-key">Gemini API Key:</label>
+                    <input type="text" id="settings-gemini-key" style="width: 100%;" placeholder="Enter your Gemini API key">
+                </div>
+            </div>
+            
+            <!-- Import/Export Section -->
+            <div class="form-group" style="border-top: 1px solid #ddd; padding-top: 15px;">
+                <label style="font-weight: bold; margin-bottom: 10px; display: block;">Settings Management</label>
+                <div style="display: flex; gap: 10px; justify-content: space-between;">
+                    <button class="btn" onclick="exportSettings()">📥 Export Settings</button>
+                    <input type="file" id="import-settings-file" accept=".json" style="display: none;" onchange="importSettings(this.files[0])">
+                    <button class="btn" onclick="document.getElementById('import-settings-file').click()">📤 Import Settings</button>
+                    <button class="btn-secondary" onclick="resetSettings()">🔄 Reset to Defaults</button>
+                </div>
+            </div>
+            
+            <div class="modal-buttons">
+                <button class="btn-secondary" onclick="closeSettingsModal()">Cancel</button>
+                <button class="btn" onclick="saveSettings()">Save Settings</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Progress Modal for Import Operations -->
+    <div id="progress-modal" class="modal">
+        <div class="modal-content" style="width: 400px;">
+            <h3 id="progress-title">Processing...</h3>
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <div id="progress-text" class="progress-text">Initializing...</div>
+            </div>
+            <div class="progress-spinner">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
 
     <script>
         // Initialize PDF.js
@@ -705,8 +871,8 @@
         let currentExtractionUID = null; // Track current extraction UID for OCR isolation
         let enableTextExtraction = true; // Setting to enable/disable text extraction for performance
         let currentZoom = 1.0;
-        const zoomLevels = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
-        let currentZoomIndex = 2;
+        const zoomLevels = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
+        let currentZoomIndex = 3;
         let currentPageTextContent = null;
         let currentPDFPageHeight = 0;
         let currentRenderOperation = null;
@@ -742,6 +908,7 @@
                 if (result.total_spaces > 0) {
                     spacesSection.style.display = 'block';
                     toggleBtn.style.display = 'inline-block';
+                    document.getElementById('import-all-spaces').style.display = 'inline-block';
                     spacesCount.textContent = `${result.total_spaces} space${result.total_spaces !== 1 ? 's' : ''}`;
                     
                     // Update spaces list
@@ -854,11 +1021,533 @@
         function handleSpaceClick(event) {
             const space = event.detail;
             console.log('Space clicked:', space);
-            // Could add additional functionality here like editing or highlighting
+            convertSpaceToExtraction(space);
+        }
+        
+        // Convert a BlueBeam space to an extraction
+        async function convertSpaceToExtraction(space) {
+            if (!space || !space.pymupdf_rect) {
+                console.error('Invalid space data:', space);
+                return;
+            }
+            
+            // Convert pymupdf_rect to extraction coordinates
+            // pymupdf_rect is [x0, y0, x1, y1] in PDF points
+            const rect = space.pymupdf_rect;
+            // Use page_number from space object (0-indexed) and convert to 1-indexed
+            const pageNum = (space.page_number !== undefined ? space.page_number : 0) + 1;
+            
+            // Get page rotation info
+            const pageInfo = spaceManager.pageInfo && spaceManager.pageInfo[space.page_number];
+            const rotation = pageInfo?.rotation || 0;
+            const pageWidth = pageInfo?.width || 612;
+            const pageHeight = pageInfo?.height || 792;
+            
+            console.log('Converting space to extraction:', {
+                spaceTitle: space.title,
+                spacePage: space.page_number,
+                extractionPage: pageNum,
+                rect: rect,
+                rotation: rotation,
+                pageSize: { width: pageWidth, height: pageHeight }
+            });
+            
+            // Apply rotation transformation if needed
+            let x0 = rect[0];
+            let y0 = rect[1];
+            let x1 = rect[2];
+            let y1 = rect[3];
+            
+            if (rotation === 90) {
+                // For 90° rotation: swap X and Y coordinates
+                const tempX0 = y0;
+                const tempY0 = x0;
+                const tempX1 = y1;
+                const tempY1 = x1;
+                
+                x0 = tempX0;
+                y0 = tempY0;
+                x1 = tempX1;
+                y1 = tempY1;
+            } else if (rotation === 180) {
+                // For 180° rotation: invert both X and Y
+                const tempX0 = pageWidth - x1;
+                const tempY0 = pageHeight - y1;
+                const tempX1 = pageWidth - x0;
+                const tempY1 = pageHeight - y0;
+                
+                x0 = tempX0;
+                y0 = tempY0;
+                x1 = tempX1;
+                y1 = tempY1;
+            } else if (rotation === 270) {
+                // For 270° rotation: swap and invert appropriately
+                const tempX0 = pageHeight - y1;
+                const tempY0 = x1;
+                const tempX1 = pageHeight - y0;
+                const tempY1 = x0;
+                
+                x0 = tempX0;
+                y0 = tempY0;
+                x1 = tempX1;
+                y1 = tempY1;
+            }
+            
+            // Convert to extraction coordinate format (normalized to PDF scale 1.0)
+            // The coordinates need to match what the selection system uses
+            const selection = {
+                page: pageNum,
+                x: Math.min(x0, x1),
+                y: Math.min(y0, y1), 
+                width: Math.abs(x1 - x0),
+                height: Math.abs(y1 - y0)
+            };
+            
+            // Store the selection for the modal
+            currentSelection = selection;
+            
+            // Pre-populate modal fields with space data
+            const modal = document.getElementById('schedule-modal');
+            document.getElementById('extraction-name').value = space.title || 'BlueBeam Space';
+            
+            // Try to detect equipment type from title
+            const equipmentType = detectEquipmentTypeFromTitle(space.title);
+            document.getElementById('equipment-type').value = equipmentType;
+            
+            // Set extraction type based on space content (default to 'schedule' for BlueBeam spaces)
+            const extractionType = detectExtractionTypeFromTitle(space.title, true);
+            document.getElementById('extraction-type').value = extractionType;
+            
+            // Add description if available
+            const description = space.subject || space.content || '';
+            document.getElementById('extraction-description').value = description;
+            
+            // Default RFQ to false
+            document.getElementById('rfq-required').checked = false;
+            
+            // Show the modal
+            modal.style.display = 'block';
+            document.getElementById('extraction-name').focus();
+            
+            setStatus(`Converting BlueBeam Space "${space.title}" to extraction...`);
+        }
+        
+        // Helper function to detect equipment type from title
+        function detectEquipmentTypeFromTitle(title) {
+            if (!title) return 'OTHER';
+            
+            const titleUpper = title.toUpperCase();
+            
+            // Check for equipment type keywords
+            if (titleUpper.includes('FAN') || titleUpper.includes('EF-') || titleUpper.includes('SF-')) {
+                return 'FANS';
+            } else if (titleUpper.includes('VAV') || titleUpper.includes('TERMINAL')) {
+                return 'VAV';
+            } else if (titleUpper.includes('GRD') || titleUpper.includes('GRILLE') || titleUpper.includes('DIFFUSER')) {
+                return 'GRD';
+            } else if (titleUpper.includes('RTU') || titleUpper.includes('ROOFTOP')) {
+                return 'RTU';
+            } else if (titleUpper.includes('AHU') || titleUpper.includes('AIR HANDLING')) {
+                return 'AHU';
+            } else if (titleUpper.includes('DUCT') || titleUpper.includes('DUCTING')) {
+                return 'DUCTING';
+            }
+            
+            return 'OTHER';
+        }
+        
+        // Helper function to detect extraction type from title (defaults to schedule for BlueBeam spaces)
+        function detectExtractionTypeFromTitle(title, isBlueBeamSpace = false) {
+            // Default to 'schedule' for BlueBeam spaces
+            if (!title) return isBlueBeamSpace ? 'schedule' : 'other';
+            
+            const titleUpper = title.toUpperCase();
+            
+            if (titleUpper.includes('SCHEDULE')) {
+                return 'schedule';
+            } else if (titleUpper.includes('DRAWING') || titleUpper.includes('PLAN')) {
+                return 'drawing';
+            } else if (titleUpper.includes('TABLE')) {
+                return 'table';
+            } else if (titleUpper.includes('DETAIL')) {
+                return 'detail';
+            } else if (titleUpper.includes('SPEC')) {
+                return 'specification';
+            }
+            
+            // Default to 'schedule' for BlueBeam spaces, 'other' for regular extractions
+            return isBlueBeamSpace ? 'schedule' : 'other';
+        }
+        
+        // Import all detected BlueBeam spaces as extractions
+        async function importAllSpaces() {
+            if (!spaceManager || !spaceManager.spaces || spaceManager.spaces.length === 0) {
+                alert('No BlueBeam spaces detected. Please detect spaces first.');
+                return;
+            }
+            
+            const totalSpaces = spaceManager.spaces.length;
+            const confirm = window.confirm(`Import all ${totalSpaces} BlueBeam spaces as extractions?\n\nThis will create ${totalSpaces} new extraction items.`);
+            
+            if (!confirm) return;
+            
+            // Show progress modal
+            const progressModal = document.getElementById('progress-modal');
+            const progressTitle = document.getElementById('progress-title');
+            const progressFill = document.getElementById('progress-fill');
+            const progressText = document.getElementById('progress-text');
+            
+            progressModal.style.display = 'block';
+            progressTitle.textContent = `Importing ${totalSpaces} BlueBeam Spaces`;
+            progressFill.style.width = '0%';
+            progressText.textContent = `Processing space 0 of ${totalSpaces}...`;
+            
+            setStatus(`Importing ${totalSpaces} BlueBeam spaces...`);
+            let imported = 0;
+            let failed = 0;
+            
+            for (let i = 0; i < spaceManager.spaces.length; i++) {
+                const space = spaceManager.spaces[i];
+                
+                // Update progress
+                const progress = ((i + 1) / totalSpaces) * 100;
+                progressFill.style.width = `${progress}%`;
+                progressFill.textContent = `${Math.round(progress)}%`;
+                progressText.textContent = `Processing "${space.title || 'Space ' + (i + 1)}" (${i + 1} of ${totalSpaces})...`;
+                
+                // Small delay to allow UI to update
+                await new Promise(resolve => setTimeout(resolve, 10));
+                
+                try {
+                    // Convert pymupdf_rect to extraction coordinates
+                    const rect = space.pymupdf_rect;
+                    // Use page_number from space object (0-indexed) and convert to 1-indexed
+                    const pageNum = (space.page_number !== undefined ? space.page_number : 0) + 1;
+                    
+                    // Get page rotation info
+                    const pageInfo = spaceManager.pageInfo && spaceManager.pageInfo[space.page_number];
+                    const rotation = pageInfo?.rotation || 0;
+                    
+                    console.log(`Importing space "${space.title}" from page ${space.page_number} (extraction page ${pageNum}, rotation: ${rotation}°)`);
+                    
+                    // Apply rotation transformation if needed
+                    let x0 = rect[0];
+                    let y0 = rect[1];
+                    let x1 = rect[2];
+                    let y1 = rect[3];
+                    
+                    const pageWidth = pageInfo?.width || 612;
+                    const pageHeight = pageInfo?.height || 792;
+                    
+                    if (rotation === 90) {
+                        // For 90° rotation: swap X and Y coordinates
+                        const tempX0 = y0;
+                        const tempY0 = x0;
+                        const tempX1 = y1;
+                        const tempY1 = x1;
+                        
+                        x0 = tempX0;
+                        y0 = tempY0;
+                        x1 = tempX1;
+                        y1 = tempY1;
+                    } else if (rotation === 180) {
+                        // For 180° rotation: invert both X and Y
+                        const tempX0 = pageWidth - x1;
+                        const tempY0 = pageHeight - y1;
+                        const tempX1 = pageWidth - x0;
+                        const tempY1 = pageHeight - y0;
+                        
+                        x0 = tempX0;
+                        y0 = tempY0;
+                        x1 = tempX1;
+                        y1 = tempY1;
+                    } else if (rotation === 270) {
+                        // For 270° rotation: swap and invert appropriately
+                        const tempX0 = pageHeight - y1;
+                        const tempY0 = x1;
+                        const tempX1 = pageHeight - y0;
+                        const tempY1 = x0;
+                        
+                        x0 = tempX0;
+                        y0 = tempY0;
+                        x1 = tempX1;
+                        y1 = tempY1;
+                    }
+                    
+                    const selection = {
+                        page: pageNum,
+                        x: Math.min(x0, x1),
+                        y: Math.min(y0, y1),
+                        width: Math.abs(x1 - x0),
+                        height: Math.abs(y1 - y0)
+                    };
+                    
+                    // Extract image from the space area
+                    const imageData = await extractImageFromSelection(selection);
+                    
+                    // Create extraction object
+                    const extraction = {
+                        id: generateExtractionUID(),
+                        legacyId: ++extractionCounter,
+                        extractionName: space.title || `BlueBeam Space ${imported + 1}`,
+                        equipmentType: detectEquipmentTypeFromTitle(space.title),
+                        extractionType: detectExtractionTypeFromTitle(space.title, true), // Pass true for BlueBeam spaces
+                        description: space.subject || space.content || '',
+                        rfqRequired: false,
+                        coordinates: selection,
+                        imageData: imageData,
+                        ocrData: null,
+                        ocrStatus: 'none',
+                        timestamp: new Date().toISOString(),
+                        isBlueBeamSpace: true,
+                        spaceXref: space.xref
+                    };
+                    
+                    extractions.push(extraction);
+                    imported++;
+                    
+                    // Mark space as imported in the space manager
+                    if (spaceManager.importedSpaces) {
+                        spaceManager.importedSpaces.add(space.xref);
+                    } else {
+                        spaceManager.importedSpaces = new Set([space.xref]);
+                    }
+                    
+                } catch (error) {
+                    console.error(`Failed to import space "${space.title}":`, error);
+                    failed++;
+                }
+            }
+            
+            // Update UI
+            updateExtractionList();
+            saveToLocalStorage();
+            restoreSelectionsForPage(currentPage);
+            
+            // Update space overlays to show imported status
+            if (spaceManager && spaceManager.currentPageNum) {
+                spaceManager.renderSpacesForPage(
+                    spaceManager.currentPageNum - 1,
+                    currentZoom,
+                    spaceManager.pageHeight,
+                    spaceManager.pageWidth,
+                    0
+                );
+            }
+            
+            // Hide progress modal
+            progressModal.style.display = 'none';
+            
+            const message = failed > 0 
+                ? `Imported ${imported} spaces successfully. ${failed} failed.`
+                : `Successfully imported all ${imported} BlueBeam spaces!`;
+            
+            setStatus(message);
+            
+            // Enable export button if we have extractions
+            if (extractions.length > 0) {
+                exportDataBtn.disabled = false;
+                extractAllBtn.disabled = false;
+            }
+        }
+        
+        // Settings Management Functions
+        async function initializeSettings() {
+            try {
+                // Initialize settings manager
+                await window.settingsManager.init();
+                
+                // Apply settings to UI
+                window.settingsManager.applySettingsToUI();
+                
+                // Load API key if saved
+                const savedApiKey = window.settingsManager.getSetting('apiSettings.geminiApiKey');
+                if (savedApiKey) {
+                    const apiKeyInput = document.getElementById('gemini-api-key');
+                    if (apiKeyInput) apiKeyInput.value = savedApiKey;
+                }
+                
+                console.log('Settings initialized successfully');
+            } catch (error) {
+                console.error('Failed to initialize settings:', error);
+            }
+        }
+        
+        function openSettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            if (!modal) return;
+            
+            // Populate settings UI
+            populateSettingsModal();
+            
+            // Show modal
+            modal.style.display = 'block';
+        }
+        
+        function closeSettingsModal() {
+            const modal = document.getElementById('settings-modal');
+            if (modal) modal.style.display = 'none';
+        }
+        
+        function populateSettingsModal() {
+            const settings = window.settingsManager.getSettings();
+            
+            // Populate equipment types
+            const equipmentList = document.getElementById('equipment-types-list');
+            equipmentList.innerHTML = '';
+            settings.equipmentTypes.forEach(type => {
+                const item = document.createElement('div');
+                item.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 5px; margin: 2px 0; background: #f0f0f0;';
+                item.innerHTML = `
+                    <span>${type.label} (${type.value})</span>
+                    <button class="btn-secondary" onclick="removeEquipmentType('${type.value}')" style="padding: 2px 8px; font-size: 12px;">Remove</button>
+                `;
+                equipmentList.appendChild(item);
+            });
+            
+            // Populate search presets
+            const searchList = document.getElementById('search-presets-list');
+            searchList.innerHTML = '';
+            settings.searchPresets.forEach(preset => {
+                const item = document.createElement('div');
+                item.style.cssText = 'display: inline-block; padding: 5px 10px; margin: 3px; background: #e0e0e0; border-radius: 3px;';
+                item.innerHTML = `
+                    ${preset}
+                    <button onclick="removeSearchPreset('${preset}')" style="margin-left: 5px; border: none; background: none; color: red; cursor: pointer;">✕</button>
+                `;
+                searchList.appendChild(item);
+            });
+            
+            // Populate default selects
+            const defaultEquipment = document.getElementById('default-equipment-type');
+            defaultEquipment.innerHTML = '';
+            settings.equipmentTypes.forEach(type => {
+                const option = document.createElement('option');
+                option.value = type.value;
+                option.textContent = type.label;
+                defaultEquipment.appendChild(option);
+            });
+            defaultEquipment.value = settings.defaultSettings.defaultEquipmentType;
+            
+            const defaultExtraction = document.getElementById('default-extraction-type');
+            defaultExtraction.innerHTML = '';
+            settings.extractionTypes.forEach(type => {
+                const option = document.createElement('option');
+                option.value = type.value;
+                option.textContent = type.label;
+                defaultExtraction.appendChild(option);
+            });
+            defaultExtraction.value = settings.defaultSettings.defaultExtractionType;
+            
+            // Set other defaults
+            document.getElementById('default-ocr-provider').value = settings.defaultSettings.ocrProvider;
+            document.getElementById('default-auto-ocr').checked = settings.defaultSettings.autoRunOCR;
+            
+            // Set API key
+            const apiKey = localStorage.getItem('gemini-api-key') || '';
+            document.getElementById('settings-gemini-key').value = apiKey;
+        }
+        
+        function addEquipmentType() {
+            const valueInput = document.getElementById('new-equipment-value');
+            const labelInput = document.getElementById('new-equipment-label');
+            
+            const value = valueInput.value.trim().toUpperCase();
+            const label = labelInput.value.trim() || value;
+            
+            if (!value) {
+                alert('Please enter an equipment type value');
+                return;
+            }
+            
+            if (window.settingsManager.addEquipmentType(value, label)) {
+                valueInput.value = '';
+                labelInput.value = '';
+                populateSettingsModal();
+            }
+        }
+        
+        function removeEquipmentType(value) {
+            if (confirm(`Remove equipment type "${value}"?`)) {
+                window.settingsManager.removeEquipmentType(value);
+                populateSettingsModal();
+            }
+        }
+        
+        function addSearchPreset() {
+            const input = document.getElementById('new-search-preset');
+            const preset = input.value.trim().toUpperCase();
+            
+            if (!preset) return;
+            
+            if (window.settingsManager.addSearchPreset(preset)) {
+                input.value = '';
+                populateSettingsModal();
+            }
+        }
+        
+        function removeSearchPreset(preset) {
+            window.settingsManager.removeSearchPreset(preset);
+            populateSettingsModal();
+        }
+        
+        function saveSettings() {
+            // Save default settings
+            const defaultSettings = {
+                defaultEquipmentType: document.getElementById('default-equipment-type').value,
+                defaultExtractionType: document.getElementById('default-extraction-type').value,
+                ocrProvider: document.getElementById('default-ocr-provider').value,
+                autoRunOCR: document.getElementById('default-auto-ocr').checked
+            };
+            
+            window.settingsManager.saveUserSettings({ defaultSettings });
+            
+            // Save API key
+            const apiKey = document.getElementById('settings-gemini-key').value;
+            if (apiKey) {
+                localStorage.setItem('gemini-api-key', apiKey);
+                // Also update the main OCR config input
+                const mainApiInput = document.getElementById('gemini-api-key');
+                if (mainApiInput) mainApiInput.value = apiKey;
+            }
+            
+            // Apply settings to UI
+            window.settingsManager.applySettingsToUI();
+            
+            // Close modal
+            closeSettingsModal();
+            
+            setStatus('Settings saved successfully');
+        }
+        
+        function exportSettings() {
+            window.settingsManager.exportSettings();
+        }
+        
+        async function importSettings(file) {
+            if (!file) return;
+            
+            if (await window.settingsManager.importSettings(file)) {
+                populateSettingsModal();
+                window.settingsManager.applySettingsToUI();
+                setStatus('Settings imported successfully');
+            }
+        }
+        
+        function resetSettings() {
+            if (confirm('Reset all settings to defaults? This cannot be undone.')) {
+                window.settingsManager.resetToDefaults();
+                populateSettingsModal();
+                window.settingsManager.applySettingsToUI();
+                setStatus('Settings reset to defaults');
+            }
         }
         
         // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Initialize Settings Manager
+            await initializeSettings();
+            
             // Initialize DOM elements
             pdfInput = document.getElementById('pdf-input');
             canvasContainer = document.getElementById('canvas-container');
@@ -898,6 +1587,7 @@
             prevPageBtn.addEventListener('click', () => changePage(-1));
             nextPageBtn.addEventListener('click', () => changePage(1));
             clearSelectionsBtn.addEventListener('click', clearAllSelections);
+            document.getElementById('delete-all-extractions').addEventListener('click', deleteAllExtractions);
             exportDataBtn.addEventListener('click', exportExtractions);
             extractAllBtn.addEventListener('click', extractAllImages);
             zoomInBtn.addEventListener('click', zoomIn);
@@ -921,7 +1611,11 @@
             
             // BlueBeam Spaces buttons
             document.getElementById('detect-spaces').addEventListener('click', detectBlueBeamSpaces);
+            document.getElementById('import-all-spaces').addEventListener('click', importAllSpaces);
             document.getElementById('toggle-spaces').addEventListener('click', toggleSpacesVisibility);
+            
+            // Settings button
+            document.getElementById('open-settings').addEventListener('click', openSettingsModal);
             
             // Listen for space click events
             document.addEventListener('spaceClicked', handleSpaceClick);
@@ -2175,6 +2869,12 @@
         function updateExtractionList() {
             console.time('Update Extraction List DOM');
             
+            // Update Delete All button visibility
+            const deleteAllBtn = document.getElementById('delete-all-extractions');
+            if (deleteAllBtn) {
+                deleteAllBtn.style.display = extractions.length > 0 ? 'inline-block' : 'none';
+            }
+            
             if (extractions.length === 0) {
                 extractionList.innerHTML = '<p style="color: #7f8c8d; font-style: italic;">No extractions saved yet</p>';
                 console.timeEnd('Update Extraction List DOM');
@@ -2306,7 +3006,7 @@
                 const savedRect = savedOverlay.querySelector(`[data-extraction-id="${extractionId}"]`);
                 if (savedRect) {
                     // Reset to original equipment type colors
-                    savedRect.className = `saved-rect equipment-type-${extraction.type}`;
+                    savedRect.className = `saved-rect equipment-type-${extraction.equipmentType || extraction.type}`;
                     if (selectedExtractionId === extractionId) {
                         savedRect.classList.add('selected');
                     }
@@ -2532,8 +3232,14 @@
                 updateExtractionList();
                 saveToLocalStorage();
                 
-                // Update Extract All button state
+                // Update button states
                 extractAllBtn.disabled = extractions.length === 0;
+                
+                // Update Delete All button visibility
+                const deleteAllBtn = document.getElementById('delete-all-extractions');
+                if (deleteAllBtn) {
+                    deleteAllBtn.style.display = extractions.length > 0 ? 'inline-block' : 'none';
+                }
                 
                 // Refresh the display to remove deleted rectangles
                 restoreSelectionsForPage(currentPage);
@@ -2546,6 +3252,38 @@
             // Simple confirmation for now - could be enhanced with custom context menu
             deleteExtraction(extractionId);
         }
+        
+        function deleteAllExtractions() {
+            const totalExtractions = extractions.length;
+            
+            if (totalExtractions === 0) {
+                alert('No extractions to delete');
+                return;
+            }
+            
+            const message = `Are you sure you want to delete ALL ${totalExtractions} extraction${totalExtractions !== 1 ? 's' : ''}?\n\nThis action cannot be undone.`;
+            
+            if (confirm(message)) {
+                // Clear all extractions
+                extractions = [];
+                selectedExtractionId = null;
+                
+                // Update UI
+                updateExtractionList();
+                saveToLocalStorage();
+                
+                // Clear all saved overlays
+                clearSavedOverlay();
+                
+                // Update button states
+                if (clearSelectionsBtn) clearSelectionsBtn.disabled = true;
+                if (exportDataBtn) exportDataBtn.disabled = true;
+                if (extractAllBtn) extractAllBtn.disabled = true;
+                document.getElementById('delete-all-extractions').style.display = 'none';
+                
+                setStatus(`Deleted all ${totalExtractions} extraction${totalExtractions !== 1 ? 's' : ''}`);
+            }
+        }
 
         function restoreSelectionsForPage(pageNum) {
             // Clear saved overlay first to prevent duplicates
@@ -2555,7 +3293,7 @@
             pageExtractions.forEach(extraction => {
                 const coords = extraction.coordinates;
                 const selectionRect = document.createElement('div');
-                selectionRect.className = `saved-rect equipment-type-${extraction.type}`;
+                selectionRect.className = `saved-rect equipment-type-${extraction.equipmentType || extraction.type}`;
                 
                 // Scale coordinates based on current zoom
                 const scaledCoords = scaleCoordinates(coords, currentZoom);
@@ -2563,7 +3301,7 @@
                 selectionRect.style.top = scaledCoords.y + 'px';
                 selectionRect.style.width = scaledCoords.width + 'px';
                 selectionRect.style.height = scaledCoords.height + 'px';
-                selectionRect.title = `${extraction.name} (${extraction.type})`;
+                selectionRect.title = `${extraction.extractionName || extraction.name} (${extraction.equipmentType || extraction.type})`;
                 selectionRect.dataset.extractionId = extraction.id;
                 
                 // Add click handler for selection
