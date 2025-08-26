@@ -5235,10 +5235,19 @@
                 return;
             }
             
+            // Show progress modal
+            const progressModal = document.getElementById('progress-modal');
+            const progressTitle = document.getElementById('progress-title');
+            const progressFill = document.getElementById('progress-fill');
+            const progressText = document.getElementById('progress-text');
+            
+            progressModal.style.display = 'flex';
+            progressTitle.textContent = 'Exporting to PDF Folder';
+            progressFill.style.width = '0%';
+            progressFill.textContent = '0%';
+            progressText.textContent = `Preparing ${extractions.length} extractions for local export...`;
+            
             try {
-                // Show progress
-                setStatus('Creating export package...');
-                
                 // Generate the ZIP file (reuse existing export logic)
                 const zip = new JSZip();
                 
@@ -5252,8 +5261,14 @@
                     equipmentGroups[equipmentType].push(extraction);
                 });
                 
+                // Track progress
+                let processedCount = 0;
+                const totalCount = extractions.length;
+                
                 // Create folders and add files for each equipment type
                 for (const [equipmentType, typeExtractions] of Object.entries(equipmentGroups)) {
+                    progressText.textContent = `Processing ${equipmentType} equipment (${typeExtractions.length} items)...`;
+                    
                     // Create equipment folder
                     const folder = zip.folder(equipmentType);
                     
@@ -5278,6 +5293,15 @@
                             const textContent = createTextFile(extraction, equipmentType);
                             folder.file(`${baseFileName}_text.txt`, textContent);
                         }
+                        
+                        // Update progress
+                        processedCount++;
+                        const progress = Math.round((processedCount / totalCount) * 70); // 70% for processing
+                        progressFill.style.width = `${progress}%`;
+                        progressFill.textContent = `${progress}%`;
+                        
+                        // Small delay to allow UI to update
+                        await new Promise(resolve => setTimeout(resolve, 10));
                     }
                 }
                 
@@ -5294,13 +5318,27 @@
                 const sessionData = createSessionData();
                 zip.file('session.pdfextractor.json', JSON.stringify(sessionData, null, 2));
                 
+                // Update progress for ZIP generation
+                progressText.textContent = 'Generating ZIP file...';
+                progressFill.style.width = '80%';
+                progressFill.textContent = '80%';
+                
                 // Generate ZIP as blob
-                const zipBlob = await zip.generateAsync({ type: 'blob' });
+                const zipBlob = await zip.generateAsync({ 
+                    type: 'blob',
+                    compression: 'DEFLATE',
+                    compressionOptions: { level: 6 }
+                });
                 
                 // Convert to base64 for sending to server
                 const reader = new FileReader();
                 reader.onloadend = async function() {
                     const base64data = reader.result.split(',')[1];
+                    
+                    // Update progress for server upload
+                    progressText.textContent = 'Saving to PDF folder...';
+                    progressFill.style.width = '90%';
+                    progressFill.textContent = '90%';
                     
                     try {
                         console.log('Exporting to PDF folder with path:', currentPDFPath);
@@ -5316,6 +5354,18 @@
                         if (response.ok) {
                             const result = await response.json();
                             console.log('Export successful:', result);
+                            
+                            // Complete progress
+                            progressFill.style.width = '100%';
+                            progressFill.textContent = '100%';
+                            progressText.textContent = 'Export complete!';
+                            
+                            // Small delay to show completion
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                            
+                            // Hide progress modal
+                            progressModal.style.display = 'none';
+                            
                             setStatus(`✅ Exported to: ${result.filename}`);
                             alert(`Export saved successfully!\n\nFile: ${result.filename}\n\nFull path: ${result.path}`);
                         } else {
@@ -5324,6 +5374,10 @@
                         }
                     } catch (error) {
                         console.error('Export to local failed:', error);
+                        
+                        // Hide progress modal
+                        progressModal.style.display = 'none';
+                        
                         alert(`Export to PDF folder failed: ${error.message}\n\nThe file will be downloaded instead.`);
                         // Fall back to download
                         const url = URL.createObjectURL(zipBlob);
@@ -5341,8 +5395,10 @@
                 
             } catch (error) {
                 console.error('Export error:', error);
+                // Hide progress modal on error
+                progressModal.style.display = 'none';
                 setStatus('Export failed');
-                alert('Failed to create export package');
+                alert('Failed to create export package: ' + error.message);
             }
         }
         
