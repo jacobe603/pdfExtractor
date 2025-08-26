@@ -341,6 +341,12 @@ def export_to_local():
         if not pdf_path or not zip_data:
             return jsonify({'error': 'Missing pdf_path or zip_data'}), 400
         
+        # Convert Windows path to WSL path if necessary
+        if pdf_path.startswith('C:\\') or pdf_path.startswith('c:\\'):
+            # Convert C:\Users\... to /mnt/c/Users/...
+            pdf_path = pdf_path.replace('C:\\', '/mnt/c/').replace('c:\\', '/mnt/c/').replace('\\', '/')
+            print(f"Converted Windows path to WSL: {pdf_path}")
+        
         # Get directory and name of PDF
         pdf_dir = os.path.dirname(pdf_path)
         pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
