@@ -1761,7 +1761,7 @@
         document.addEventListener('DOMContentLoaded', async function() {
             // Check server status immediately and periodically
             await checkServerStatus();
-            setInterval(checkServerStatus, 30000); // Check every 30 seconds
+            setInterval(checkServerStatus, 5000); // Check every 5 seconds for more responsive UI
             
             // Initialize Settings Manager
             await initializeSettings();
@@ -3558,11 +3558,16 @@
             // Update Delete All button visibility
             const deleteAllBtn = document.getElementById('delete-all-extractions');
             const manageAllBtn = document.getElementById('manage-all');
+            const exportLocalBtn = document.getElementById('export-local');
             if (deleteAllBtn) {
                 deleteAllBtn.style.display = extractions.length > 0 ? 'inline-block' : 'none';
             }
             if (manageAllBtn) {
                 manageAllBtn.style.display = extractions.length > 0 ? 'inline-block' : 'none';
+            }
+            // Update Export to PDF Folder button visibility
+            if (exportLocalBtn) {
+                exportLocalBtn.style.display = (serverAvailable && extractions.length > 0) ? 'inline-block' : 'none';
             }
             
             if (extractions.length === 0) {
