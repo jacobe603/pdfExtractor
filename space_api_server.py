@@ -12,6 +12,8 @@ import os
 import json
 import tempfile
 import hashlib
+import base64
+from datetime import datetime
 from pathlib import Path
 from werkzeug.utils import secure_filename
 from bluebeam_space_handler import BlueBeamSpaceHandler
@@ -227,6 +229,164 @@ def cache_stats():
     })
 
 
+# ============================================================
+# SESSION MANAGEMENT ENDPOINTS
+# ============================================================
+
+@app.route('/api/session/save', methods=['POST'])
+def save_session():
+    """Save session file alongside PDF."""
+    try:
+        data = request.get_json()
+        pdf_path = data.get('pdf_path')
+        session_data = data.get('session_data')
+        
+        if not pdf_path or not session_data:
+            return jsonify({'error': 'Missing pdf_path or session_data'}), 400
+        
+        # Create session file path
+        session_path = f"{pdf_path}.pdfextractor.json"
+        
+        # Save session data
+        with open(session_path, 'w') as f:
+            json.dump(session_data, f, indent=2)
+        
+        return jsonify({
+            'success': True,
+            'path': session_path,
+            'message': f'Session saved to {os.path.basename(session_path)}'
+        })
+        
+    except Exception as e:
+        print(f"Error saving session: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/session/load', methods=['GET'])
+def load_session():
+    """Load session file if exists."""
+    try:
+        pdf_path = request.args.get('pdf_path')
+        
+        if not pdf_path:
+            return jsonify({'error': 'No pdf_path provided'}), 400
+        
+        # Check for session file
+        session_path = f"{pdf_path}.pdfextractor.json"
+        
+        if os.path.exists(session_path):
+            with open(session_path, 'r') as f:
+                session_data = json.load(f)
+            
+            # Get file modification time
+            last_modified = os.path.getmtime(session_path)
+            
+            return jsonify({
+                'success': True,
+                'session': session_data,
+                'last_modified': datetime.fromtimestamp(last_modified).isoformat(),
+                'path': session_path
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'No session found for this PDF'
+            })
+            
+    except Exception as e:
+        print(f"Error loading session: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/session/delete', methods=['DELETE'])
+def delete_session():
+    """Delete session file."""
+    try:
+        pdf_path = request.args.get('pdf_path')
+        
+        if not pdf_path:
+            return jsonify({'error': 'No pdf_path provided'}), 400
+        
+        session_path = f"{pdf_path}.pdfextractor.json"
+        
+        if os.path.exists(session_path):
+            os.remove(session_path)
+            return jsonify({
+                'success': True,
+                'message': f'Session deleted: {os.path.basename(session_path)}'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'No session file found'
+            })
+            
+    except Exception as e:
+        print(f"Error deleting session: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================================
+# LOCAL EXPORT ENDPOINTS
+# ============================================================
+
+@app.route('/api/export/local', methods=['POST'])
+def export_to_local():
+    """Export ZIP to same directory as PDF."""
+    try:
+        data = request.get_json()
+        pdf_path = data.get('pdf_path')
+        zip_data = data.get('zip_data')  # Base64 encoded ZIP
+        
+        if not pdf_path or not zip_data:
+            return jsonify({'error': 'Missing pdf_path or zip_data'}), 400
+        
+        # Get directory and name of PDF
+        pdf_dir = os.path.dirname(pdf_path)
+        pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        
+        # Create export filename with timestamp
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        export_name = f"{pdf_name}_extractions_{timestamp}.zip"
+        export_path = os.path.join(pdf_dir, export_name)
+        
+        # Decode and save ZIP file
+        zip_bytes = base64.b64decode(zip_data)
+        with open(export_path, 'wb') as f:
+            f.write(zip_bytes)
+        
+        return jsonify({
+            'success': True,
+            'path': export_path,
+            'filename': export_name,
+            'message': f'Exported to {export_name}'
+        })
+        
+    except Exception as e:
+        print(f"Error exporting to local: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/file/info', methods=['POST'])
+def get_file_info():
+    """Get file path information for uploaded file."""
+    try:
+        # This endpoint helps track file paths when files are selected
+        data = request.get_json()
+        file_name = data.get('file_name')
+        
+        # For now, return a placeholder - in production, you might
+        # implement file tracking or use a file browser endpoint
+        return jsonify({
+            'success': True,
+            'message': 'File path tracking requires file browser implementation'
+        })
+        
+    except Exception as e:
+        print(f"Error getting file info: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     print("Starting BlueBeam Space API Server...")
     print("Available endpoints:")
@@ -236,6 +396,14 @@ if __name__ == '__main__':
     print("  POST /api/clear_cache - Clear spaces cache")
     print("  GET  /api/cache_stats - Get cache statistics")
     print("  GET  /api/health - Health check")
+    print("")
+    print("Session Management:")
+    print("  POST /api/session/save - Save session file alongside PDF")
+    print("  GET  /api/session/load - Load session from file")
+    print("  DELETE /api/session/delete - Delete session file")
+    print("")
+    print("Local Export:")
+    print("  POST /api/export/local - Export ZIP to PDF directory")
     print("")
     print("Server running on http://localhost:5000")
     print("CORS enabled for all origins")

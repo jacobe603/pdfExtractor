@@ -613,6 +613,14 @@
     </style>
 </head>
 <body>
+    <!-- Server Status Indicator -->
+    <div id="server-status" style="position: fixed; top: 10px; right: 10px; 
+         padding: 5px 10px; background: rgba(0,0,0,0.7); color: white; 
+         border-radius: 4px; font-size: 12px; z-index: 1000; display: flex; align-items: center; gap: 5px;">
+        <span id="server-status-icon">🔴</span>
+        <span id="server-status-text">Server Offline</span>
+    </div>
+    
     <div class="toolbar">
         <h1>PDF Schedule Extractor</h1>
         <div class="file-input">
@@ -623,6 +631,7 @@
             <button class="btn" id="clear-selections" disabled>Clear All</button>
             <button class="btn" id="delete-all-extractions" style="background: #e74c3c; display: none;">🗑️ Delete All</button>
             <button class="btn" id="export-data" disabled>Export ZIP Package</button>
+            <button class="btn" id="export-local" style="background: #16a085; display: none;">💾 Export to PDF Folder</button>
             <button class="btn" id="detect-spaces" style="background: #3498db;">🔍 Detect Spaces</button>
             <button class="btn" id="import-all-spaces" style="background: #9b59b6; display: none;">📥 Import All Spaces</button>
             <button class="btn" id="toggle-spaces" style="background: #2ecc71; display: none;">👁️ Hide Spaces</button>
@@ -1010,6 +1019,8 @@
         let currentPDF = null;
         let currentPDFData = null; // Store original PDF data for annotation
         let currentPDFFile = null; // Store the File object for session management
+        let currentPDFPath = null; // Store the actual file path when available
+        let serverAvailable = false; // Track if Flask server is available
         let currentPage = 1;
         let totalPages = 0;
         let canvas = null;
@@ -1750,6 +1761,10 @@
         
         // Initialize
         document.addEventListener('DOMContentLoaded', async function() {
+            // Check server status immediately and periodically
+            await checkServerStatus();
+            setInterval(checkServerStatus, 30000); // Check every 30 seconds
+            
             // Initialize Settings Manager
             await initializeSettings();
             
@@ -1794,6 +1809,7 @@
             clearSelectionsBtn.addEventListener('click', clearAllSelections);
             document.getElementById('delete-all-extractions').addEventListener('click', deleteAllExtractions);
             exportDataBtn.addEventListener('click', exportExtractions);
+            document.getElementById('export-local').addEventListener('click', exportToLocalDirectory);
             extractAllBtn.addEventListener('click', extractAllImages);
             zoomInBtn.addEventListener('click', zoomIn);
             zoomOutBtn.addEventListener('click', zoomOut);
@@ -5063,6 +5079,248 @@
 
         // ============================================================
         // END SESSION MANAGEMENT FUNCTIONS
+        // ============================================================
+
+        // ============================================================
+        // SERVER DETECTION AND HYBRID SESSION MANAGEMENT
+        // ============================================================
+        
+        // Check if Flask server is available
+        async function checkServerStatus() {
+            try {
+                const response = await fetch('http://localhost:5000/api/health', {
+                    method: 'GET',
+                    mode: 'cors',
+                    cache: 'no-cache'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    serverAvailable = data.status === 'healthy';
+                } else {
+                    serverAvailable = false;
+                }
+            } catch (error) {
+                console.log('Server not available:', error.message);
+                serverAvailable = false;
+            }
+            
+            updateServerStatusUI(serverAvailable);
+            return serverAvailable;
+        }
+        
+        // Update UI to show server status
+        function updateServerStatusUI(available) {
+            const statusIcon = document.getElementById('server-status-icon');
+            const statusText = document.getElementById('server-status-text');
+            const exportLocalBtn = document.getElementById('export-local');
+            
+            if (statusIcon && statusText) {
+                if (available) {
+                    statusIcon.textContent = '🟢';
+                    statusText.textContent = 'Server Connected';
+                    document.getElementById('server-status').style.background = 'rgba(46, 204, 113, 0.2)';
+                } else {
+                    statusIcon.textContent = '🔴';
+                    statusText.textContent = 'Server Offline';
+                    document.getElementById('server-status').style.background = 'rgba(0, 0, 0, 0.7)';
+                }
+            }
+            
+            // Show/hide export to local button based on server availability
+            if (exportLocalBtn) {
+                exportLocalBtn.style.display = available && extractions.length > 0 ? 'inline-block' : 'none';
+            }
+        }
+        
+        // Hybrid save session - try server first, fall back to localStorage
+        async function saveSessionHybrid() {
+            const sessionData = createSessionData();
+            
+            // Try server save first if available and we have a path
+            if (serverAvailable && currentPDFPath) {
+                try {
+                    const response = await fetch('http://localhost:5000/api/session/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            pdf_path: currentPDFPath,
+                            session_data: sessionData
+                        })
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        updateSessionStatus(`Session saved to file (${extractions.length} extractions)`);
+                        console.log('Session saved to file:', result.path);
+                        return;
+                    }
+                } catch (error) {
+                    console.warn('Server save failed:', error);
+                }
+            }
+            
+            // Fall back to localStorage
+            saveSessionToLocalStorage();
+        }
+        
+        // Hybrid load session - try server first, fall back to localStorage
+        async function loadSessionHybrid(fileName) {
+            // Try server load first if available and we have a path
+            if (serverAvailable && currentPDFPath) {
+                try {
+                    const response = await fetch(
+                        `http://localhost:5000/api/session/load?pdf_path=${encodeURIComponent(currentPDFPath)}`
+                    );
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.success && data.session) {
+                            console.log('Loaded session from file:', data.path);
+                            updateSessionStatus('Session loaded from file');
+                            return data.session;
+                        }
+                    }
+                } catch (error) {
+                    console.warn('Server load failed:', error);
+                }
+            }
+            
+            // Fall back to localStorage
+            return loadSessionFromLocalStorage(fileName);
+        }
+        
+        // Export to local directory (next to PDF)
+        async function exportToLocalDirectory() {
+            if (!serverAvailable || !currentPDFPath) {
+                alert('Export to PDF folder requires the server to be running and a known PDF path.\n\nUse regular Export instead.');
+                return;
+            }
+            
+            if (extractions.length === 0) {
+                alert('No extractions to export');
+                return;
+            }
+            
+            try {
+                // Show progress
+                setStatus('Creating export package...');
+                
+                // Generate the ZIP file (reuse existing export logic)
+                const zip = new JSZip();
+                
+                // Group extractions by equipment type
+                const equipmentGroups = {};
+                extractions.forEach(extraction => {
+                    const equipmentType = extraction.equipmentType || 'UNKNOWN';
+                    if (!equipmentGroups[equipmentType]) {
+                        equipmentGroups[equipmentType] = [];
+                    }
+                    equipmentGroups[equipmentType].push(extraction);
+                });
+                
+                // Create folders and add files for each equipment type
+                for (const [equipmentType, typeExtractions] of Object.entries(equipmentGroups)) {
+                    // Create equipment folder
+                    const folder = zip.folder(equipmentType);
+                    
+                    for (const extraction of typeExtractions) {
+                        // Create safe filename
+                        const safeName = (extraction.extractionName || extraction.name || 'extraction')
+                            .replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                        const pageNum = extraction.coordinates?.page || 1;
+                        const baseFileName = `${safeName}_page${pageNum}`;
+                        
+                        // Ensure image is extracted and add to ZIP
+                        const imageData = await ensureImageExtracted(extraction);
+                        if (imageData) {
+                            const imageBlob = await dataURLToBlob(imageData);
+                            folder.file(`${baseFileName}.png`, imageBlob);
+                        }
+                        
+                        // Add OCR data if available
+                        if (extraction.ocrData) {
+                            folder.file(`${baseFileName}_table.json`, JSON.stringify(extraction.ocrData, null, 2));
+                            
+                            const textContent = createTextFile(extraction, equipmentType);
+                            folder.file(`${baseFileName}_text.txt`, textContent);
+                        }
+                    }
+                }
+                
+                // Add main data file
+                const mainData = {
+                    project: document.getElementById('project-name')?.value || 'Construction Project',
+                    exportDate: new Date().toISOString(),
+                    pdfFile: currentPDFFile?.name || 'unknown.pdf',
+                    equipment: equipmentGroups
+                };
+                zip.file('project_data.json', JSON.stringify(mainData, null, 2));
+                
+                // Add session file
+                const sessionData = createSessionData();
+                zip.file('session.pdfextractor.json', JSON.stringify(sessionData, null, 2));
+                
+                // Generate ZIP as blob
+                const zipBlob = await zip.generateAsync({ type: 'blob' });
+                
+                // Convert to base64 for sending to server
+                const reader = new FileReader();
+                reader.onloadend = async function() {
+                    const base64data = reader.result.split(',')[1];
+                    
+                    try {
+                        const response = await fetch('http://localhost:5000/api/export/local', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                pdf_path: currentPDFPath,
+                                zip_data: base64data
+                            })
+                        });
+                        
+                        if (response.ok) {
+                            const result = await response.json();
+                            setStatus(`✅ Exported to: ${result.filename}`);
+                            alert(`Export saved to PDF directory:\n${result.filename}`);
+                        } else {
+                            throw new Error('Export failed');
+                        }
+                    } catch (error) {
+                        console.error('Export to local failed:', error);
+                        // Fall back to download
+                        const url = URL.createObjectURL(zipBlob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${currentPDFFile?.name || 'export'}_extractions.zip`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                        setStatus('Export downloaded (server save failed)');
+                    }
+                };
+                reader.readAsDataURL(zipBlob);
+                
+            } catch (error) {
+                console.error('Export error:', error);
+                setStatus('Export failed');
+                alert('Failed to create export package');
+            }
+        }
+        
+        // Override the original saveToLocalStorage to use hybrid approach
+        const originalSaveToLocalStorage = saveToLocalStorage;
+        function saveToLocalStorage() {
+            // Use hybrid save instead
+            saveSessionHybrid();
+            
+            // Still call original for backward compatibility
+            originalSaveToLocalStorage();
+        }
+        
+        // ============================================================
+        // END SERVER DETECTION AND HYBRID SESSION MANAGEMENT
         // ============================================================
 
         // Don't auto-load old localStorage data when we have session management
