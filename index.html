@@ -5662,13 +5662,47 @@
                     }
                 }
                 
-                // Add main data file
+                // Add main data file (without image data)
                 const mainData = {
                     project: document.getElementById('project-name')?.value || 'Construction Project',
                     exportDate: new Date().toISOString(),
                     pdfFile: currentPDFFile?.name || 'unknown.pdf',
-                    equipment: equipmentGroups
+                    totalExtractions: extractions.length,
+                    equipmentTypes: Object.keys(equipmentGroups),
+                    equipment: {}
                 };
+                
+                // Add extraction metadata without image data
+                for (const [equipmentType, typeExtractions] of Object.entries(equipmentGroups)) {
+                    mainData.equipment[equipmentType] = [];
+                    
+                    for (const extraction of typeExtractions) {
+                        const safeName = (extraction.extractionName || extraction.name || 'extraction')
+                            .replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                        const pageNum = extraction.coordinates?.page || 1;
+                        const baseFileName = `${safeName}_page${pageNum}`;
+                        
+                        // Create extraction metadata (NO image data)
+                        const extractionData = {
+                            id: extraction.id,
+                            extractionName: extraction.extractionName,
+                            extractionType: extraction.extractionType,
+                            equipmentType: extraction.equipmentType,
+                            description: extraction.description,
+                            coordinates: extraction.coordinates,
+                            ocrData: extraction.ocrData,
+                            files: {
+                                image: `${equipmentType}/${baseFileName}.png`,
+                                tableData: extraction.ocrData ? `${equipmentType}/${baseFileName}_table.json` : null,
+                                textData: extraction.ocrData ? `${equipmentType}/${baseFileName}_text.txt` : null
+                            },
+                            timestamp: extraction.timestamp
+                        };
+                        
+                        mainData.equipment[equipmentType].push(extractionData);
+                    }
+                }
+                
                 zip.file('project_data.json', JSON.stringify(mainData, null, 2));
                 
                 // Add session file
