@@ -4709,19 +4709,8 @@
         }
 
         function saveToLocalStorage() {
-            // Redirect to new session save function
-            saveSessionToLocalStorage();
-            
-            // Keep old localStorage save for backward compatibility (will be phased out)
-            try {
-                const data = {
-                    extractions: extractions,
-                    counter: extractionCounter
-                };
-                localStorage.setItem('pdfExtractorData', JSON.stringify(data));
-            } catch (error) {
-                console.error('Error saving to localStorage:', error);
-            }
+            // Use hybrid save which will try server first, then fall back to localStorage
+            saveSessionHybrid();
         }
 
         function loadFromLocalStorage() {
@@ -4778,37 +4767,9 @@
             return sessionData;
         }
         
-        // Save session to localStorage
+        // Wrapper for backward compatibility
         function saveSessionToLocalStorage() {
-            if (!currentPDFFile) {
-                console.log('No PDF file loaded, skipping session save');
-                return;
-            }
-            
-            try {
-                const sessionData = createSessionData();
-                const sessionKey = `pdfExtractor_session_${currentPDFFile.name}`;
-                
-                // Check storage size before saving
-                const sessionString = JSON.stringify(sessionData);
-                const sizeKB = Math.round(sessionString.length / 1024);
-                
-                if (sizeKB > 2048) { // Warn if over 2MB
-                    console.warn(`Large session size: ${sizeKB}KB`);
-                }
-                
-                localStorage.setItem(sessionKey, sessionString);
-                updateRecentSessions(currentPDFFile.name);
-                
-                // Update session status in UI
-                updateSessionStatus(`Session saved (${extractions.length} extractions)`);
-                console.log(`Session saved for ${currentPDFFile.name}: ${sizeKB}KB`);
-            } catch (error) {
-                console.error('Error saving session:', error);
-                if (error.name === 'QuotaExceededError') {
-                    alert('Session storage full. Consider exporting your session or clearing old sessions.');
-                }
-            }
+            saveSessionHybrid();
         }
         
         // Load session from localStorage
@@ -5153,6 +5114,9 @@
                         const result = await response.json();
                         updateSessionStatus(`Session saved to file (${extractions.length} extractions)`);
                         console.log('Session saved to file:', result.path);
+                        
+                        // Also save to localStorage as backup
+                        saveSessionToLocalStorageOnly(sessionData);
                         return;
                     }
                 } catch (error) {
@@ -5160,8 +5124,50 @@
                 }
             }
             
-            // Fall back to localStorage
-            saveSessionToLocalStorage();
+            // Fall back to localStorage only
+            saveSessionToLocalStorageOnly(sessionData);
+        }
+        
+        // Direct localStorage save without recursion
+        function saveSessionToLocalStorageOnly(sessionData) {
+            if (!sessionData) {
+                sessionData = createSessionData();
+            }
+            
+            if (!currentPDFFile) {
+                console.log('No PDF file loaded, skipping session save');
+                return;
+            }
+            
+            try {
+                const sessionKey = `pdfExtractor_session_${currentPDFFile.name}`;
+                const sessionString = JSON.stringify(sessionData);
+                const sizeKB = Math.round(sessionString.length / 1024);
+                
+                if (sizeKB > 2048) {
+                    console.warn(`Large session size: ${sizeKB}KB`);
+                }
+                
+                localStorage.setItem(sessionKey, sessionString);
+                updateRecentSessions(currentPDFFile.name);
+                
+                // Update session status in UI
+                updateSessionStatus(`Session saved (${extractions.length} extractions)`);
+                console.log(`Session saved to localStorage for ${currentPDFFile.name}: ${sizeKB}KB`);
+                
+                // Also save legacy format for backward compatibility
+                const legacyData = {
+                    extractions: extractions,
+                    counter: extractionCounter
+                };
+                localStorage.setItem('pdfExtractorData', JSON.stringify(legacyData));
+                
+            } catch (error) {
+                console.error('Error saving session:', error);
+                if (error.name === 'QuotaExceededError') {
+                    alert('Session storage full. Consider exporting your session or clearing old sessions.');
+                }
+            }
         }
         
         // Hybrid load session - try server first, fall back to localStorage
@@ -5309,15 +5315,7 @@
             }
         }
         
-        // Override the original saveToLocalStorage to use hybrid approach
-        const originalSaveToLocalStorage = saveToLocalStorage;
-        function saveToLocalStorage() {
-            // Use hybrid save instead
-            saveSessionHybrid();
-            
-            // Still call original for backward compatibility
-            originalSaveToLocalStorage();
-        }
+        // Note: saveToLocalStorage already calls saveSessionHybrid, no need to override
         
         // ============================================================
         // END SERVER DETECTION AND HYBRID SESSION MANAGEMENT
