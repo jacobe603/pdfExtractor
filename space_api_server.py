@@ -409,6 +409,209 @@ def export_to_local():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/browse', methods=['GET'])
+def browse_files():
+    """Browse for PDF files in common directories."""
+    try:
+        import platform
+        from pathlib import Path
+        
+        # Get the starting directory from query params or use defaults
+        start_dir = request.args.get('path', '')
+        
+        # Common directories to search
+        if not start_dir:
+            if platform.system() == 'Windows' or os.path.exists('/mnt/c'):
+                # Windows or WSL
+                user_home = os.path.expanduser('~')
+                if '/mnt/c' in user_home or os.path.exists('/mnt/c'):
+                    # WSL environment
+                    common_dirs = [
+                        '/mnt/c/Users',
+                        os.getcwd(),
+                    ]
+                else:
+                    # Native Windows
+                    common_dirs = [
+                        str(Path.home() / 'Documents'),
+                        str(Path.home() / 'Downloads'),
+                        str(Path.home() / 'Desktop'),
+                        os.getcwd(),
+                    ]
+            else:
+                # Linux/Mac
+                common_dirs = [
+                    str(Path.home() / 'Documents'),
+                    str(Path.home() / 'Downloads'),
+                    str(Path.home() / 'Desktop'),
+                    os.getcwd(),
+                ]
+        else:
+            common_dirs = [start_dir]
+        
+        files = []
+        folders = []
+        
+        for directory in common_dirs:
+            if os.path.exists(directory):
+                try:
+                    for item in os.listdir(directory):
+                        item_path = os.path.join(directory, item)
+                        if os.path.isdir(item_path):
+                            folders.append({
+                                'name': item,
+                                'path': item_path,
+                                'type': 'folder'
+                            })
+                        elif item.lower().endswith('.pdf'):
+                            stat = os.stat(item_path)
+                            files.append({
+                                'name': item,
+                                'path': item_path,
+                                'size': stat.st_size,
+                                'modified': stat.st_mtime,
+                                'type': 'file'
+                            })
+                except PermissionError:
+                    continue
+        
+        # Sort folders first, then files
+        folders.sort(key=lambda x: x['name'].lower())
+        files.sort(key=lambda x: x['name'].lower())
+        
+        return jsonify({
+            'success': True,
+            'current_dir': start_dir or 'Common Locations',
+            'folders': folders,
+            'files': files,
+            'parent': os.path.dirname(start_dir) if start_dir else None
+        })
+        
+    except Exception as e:
+        print(f"Error browsing files: {str(e)}", flush=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/find-file', methods=['POST'])
+def find_file():
+    """Find a file by name, size, and modified date."""
+    try:
+        import platform
+        from pathlib import Path
+        
+        data = request.get_json()
+        file_name = data.get('name')
+        file_size = data.get('size')
+        file_modified = data.get('modified')
+        
+        if not file_name:
+            return jsonify({'error': 'File name required'}), 400
+        
+        # Common directories to search
+        if platform.system() == 'Windows' or os.path.exists('/mnt/c'):
+            if os.path.exists('/mnt/c'):
+                # WSL
+                search_dirs = [
+                    '/mnt/c/Users',
+                ]
+                # Add specific user directories if we can find them
+                for user_dir in os.listdir('/mnt/c/Users'):
+                    user_path = f'/mnt/c/Users/{user_dir}'
+                    if os.path.isdir(user_path):
+                        search_dirs.extend([
+                            f'{user_path}/Documents',
+                            f'{user_path}/Downloads',
+                            f'{user_path}/Desktop',
+                            f'{user_path}/Claude',
+                        ])
+            else:
+                # Native Windows
+                search_dirs = [
+                    str(Path.home() / 'Documents'),
+                    str(Path.home() / 'Downloads'),
+                    str(Path.home() / 'Desktop'),
+                ]
+        else:
+            search_dirs = [
+                str(Path.home() / 'Documents'),
+                str(Path.home() / 'Downloads'),
+                str(Path.home() / 'Desktop'),
+            ]
+        
+        # Add current directory
+        search_dirs.append(os.getcwd())
+        
+        matches = []
+        
+        for directory in search_dirs:
+            if os.path.exists(directory):
+                for root, dirs, files in os.walk(directory):
+                    # Skip hidden directories
+                    dirs[:] = [d for d in dirs if not d.startswith('.')]
+                    
+                    for file in files:
+                        if file == file_name:
+                            file_path = os.path.join(root, file)
+                            try:
+                                stat = os.stat(file_path)
+                                # Check if size matches (if provided)
+                                if file_size and abs(stat.st_size - file_size) > 100:
+                                    continue
+                                
+                                matches.append({
+                                    'path': file_path,
+                                    'size': stat.st_size,
+                                    'modified': stat.st_mtime,
+                                    'exact_match': stat.st_size == file_size if file_size else True
+                                })
+                                
+                                # If exact match, return immediately
+                                if file_size and stat.st_size == file_size:
+                                    print(f"Found exact match: {file_path}", flush=True)
+                                    return jsonify({
+                                        'success': True,
+                                        'found': True,
+                                        'path': file_path,
+                                        'confidence': 'high'
+                                    })
+                            except:
+                                continue
+                    
+                    # Limit search depth to avoid taking too long
+                    if len(matches) > 10:
+                        break
+        
+        if len(matches) == 1:
+            print(f"Found unique match: {matches[0]['path']}", flush=True)
+            return jsonify({
+                'success': True,
+                'found': True,
+                'path': matches[0]['path'],
+                'confidence': 'medium'
+            })
+        elif len(matches) > 1:
+            # Multiple matches, return the most recent
+            matches.sort(key=lambda x: x['modified'], reverse=True)
+            print(f"Found {len(matches)} matches, returning most recent: {matches[0]['path']}", flush=True)
+            return jsonify({
+                'success': True,
+                'found': True,
+                'path': matches[0]['path'],
+                'confidence': 'low',
+                'multiple_matches': len(matches)
+            })
+        else:
+            print(f"No matches found for {file_name}", flush=True)
+            return jsonify({
+                'success': True,
+                'found': False
+            })
+        
+    except Exception as e:
+        print(f"Error finding file: {str(e)}", flush=True)
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/file/info', methods=['POST'])
 def get_file_info():
     """Get file path information for uploaded file."""

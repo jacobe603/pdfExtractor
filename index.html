@@ -619,6 +619,13 @@
         <div class="file-input">
             <input type="file" id="pdf-input" accept=".pdf">
             <label for="pdf-input">Choose PDF</label>
+            <select id="recent-files" style="margin-left: 10px; padding: 8px; border-radius: 4px; 
+                     border: 1px solid #bdc3c7; background: white; cursor: pointer; display: none;">
+                <option value="">Recent Files...</option>
+            </select>
+            <button id="browse-server" class="btn" style="margin-left: 10px; background: #3498db; display: none;">
+                📁 Browse Server
+            </button>
         </div>
         <div class="controls">
             <button class="btn" id="clear-selections" disabled>Clear All</button>
@@ -1019,6 +1026,7 @@
         let currentPDFFile = null; // Store the File object for session management
         let currentPDFPath = null; // Store the actual file path when available
         let serverAvailable = false; // Track if Flask server is available
+        let recentFiles = {}; // Store recent file paths
         let currentPage = 1;
         let totalPages = 0;
         let canvas = null;
@@ -1766,6 +1774,23 @@
             // Initialize Settings Manager
             await initializeSettings();
             
+            // Load recent files
+            loadRecentFiles();
+            
+            // Setup recent files dropdown
+            const recentFilesDropdown = document.getElementById('recent-files');
+            if (recentFilesDropdown) {
+                recentFilesDropdown.addEventListener('change', handleRecentFileSelect);
+            }
+            
+            // Setup browse server button
+            const browseServerBtn = document.getElementById('browse-server');
+            if (browseServerBtn) {
+                browseServerBtn.addEventListener('click', showFileBrowser);
+                // Show/hide based on server status
+                browseServerBtn.style.display = serverAvailable ? 'inline-block' : 'none';
+            }
+            
             // Initialize DOM elements
             pdfInput = document.getElementById('pdf-input');
             canvasContainer = document.getElementById('canvas-container');
@@ -1913,6 +1938,9 @@
 
             // Store file reference for session management
             currentPDFFile = file;
+            
+            // Try to auto-detect file path
+            await tryAutoDetectPath(file);
             
             // Clear BlueBeam Spaces from previous PDF
             if (spaceManager) {
@@ -5048,6 +5076,271 @@
         // ============================================================
 
         // ============================================================
+        // PATH DETECTION AND RECENT FILES MANAGEMENT
+        // ============================================================
+        
+        // Load recent files from localStorage
+        function loadRecentFiles() {
+            try {
+                const stored = localStorage.getItem('pdfExtractor_recentFiles');
+                if (stored) {
+                    recentFiles = JSON.parse(stored);
+                    updateRecentFilesDropdown();
+                }
+            } catch (error) {
+                console.error('Error loading recent files:', error);
+                recentFiles = {};
+            }
+        }
+        
+        // Save recent files to localStorage
+        function saveRecentFiles() {
+            try {
+                // Limit to 20 most recent files
+                const entries = Object.entries(recentFiles);
+                if (entries.length > 20) {
+                    entries.sort((a, b) => b[1].lastUsed - a[1].lastUsed);
+                    recentFiles = Object.fromEntries(entries.slice(0, 20));
+                }
+                localStorage.setItem('pdfExtractor_recentFiles', JSON.stringify(recentFiles));
+            } catch (error) {
+                console.error('Error saving recent files:', error);
+            }
+        }
+        
+        // Add file to recent files
+        function addToRecentFiles(fileName, filePath, fileSize) {
+            const key = `${fileName}_${fileSize}`;
+            recentFiles[key] = {
+                name: fileName,
+                path: filePath,
+                size: fileSize,
+                lastUsed: Date.now()
+            };
+            saveRecentFiles();
+            updateRecentFilesDropdown();
+        }
+        
+        // Update recent files dropdown
+        function updateRecentFilesDropdown() {
+            const dropdown = document.getElementById('recent-files');
+            if (!dropdown) return;
+            
+            // Clear existing options except first
+            while (dropdown.options.length > 1) {
+                dropdown.remove(1);
+            }
+            
+            const entries = Object.entries(recentFiles);
+            if (entries.length === 0) {
+                dropdown.style.display = 'none';
+                return;
+            }
+            
+            dropdown.style.display = 'inline-block';
+            
+            // Sort by last used
+            entries.sort((a, b) => b[1].lastUsed - a[1].lastUsed);
+            
+            // Add recent files
+            entries.slice(0, 10).forEach(([key, file]) => {
+                const option = document.createElement('option');
+                option.value = file.path;
+                option.textContent = file.name;
+                option.dataset.size = file.size;
+                dropdown.appendChild(option);
+            });
+        }
+        
+        // Handle recent file selection
+        async function handleRecentFileSelect(event) {
+            const path = event.target.value;
+            if (!path || path === '') return;
+            
+            currentPDFPath = path;
+            setStatus(`Path set from recent files: ${path.split('/').pop()}`);
+            
+            // Reset dropdown
+            event.target.value = '';
+            
+            // If we have the file loaded, update its path
+            if (currentPDFFile) {
+                const key = `${currentPDFFile.name}_${currentPDFFile.size}`;
+                if (recentFiles[key]) {
+                    recentFiles[key].lastUsed = Date.now();
+                    saveRecentFiles();
+                }
+            }
+        }
+        
+        // Try to auto-detect file path
+        async function tryAutoDetectPath(file) {
+            if (!serverAvailable) return;
+            
+            try {
+                // Check if we already have this file in recent files
+                const key = `${file.name}_${file.size}`;
+                if (recentFiles[key] && recentFiles[key].path) {
+                    currentPDFPath = recentFiles[key].path;
+                    setStatus(`Path found in recent files: ${file.name}`);
+                    recentFiles[key].lastUsed = Date.now();
+                    saveRecentFiles();
+                    return;
+                }
+                
+                // Try to find file on server
+                setStatus('Searching for file path...');
+                const response = await fetch('http://localhost:5000/api/find-file', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: file.name,
+                        size: file.size,
+                        modified: file.lastModified
+                    })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    if (result.found) {
+                        currentPDFPath = result.path;
+                        addToRecentFiles(file.name, result.path, file.size);
+                        
+                        if (result.confidence === 'high') {
+                            setStatus(`✓ File path found: ${result.path}`);
+                        } else if (result.confidence === 'medium') {
+                            setStatus(`File path found (unique match): ${result.path}`);
+                        } else {
+                            setStatus(`File path found (best guess): ${result.path}`);
+                        }
+                    } else {
+                        setStatus('File path not found - Export to PDF Folder will prompt for path');
+                    }
+                }
+            } catch (error) {
+                console.error('Error auto-detecting path:', error);
+            }
+        }
+        
+        // Show file browser modal
+        async function showFileBrowser() {
+            if (!serverAvailable) {
+                alert('Server must be running to browse files');
+                return;
+            }
+            
+            // Create modal if it doesn't exist
+            let modal = document.getElementById('file-browser-modal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'file-browser-modal';
+                modal.className = 'modal';
+                modal.innerHTML = `
+                    <div class="modal-content" style="width: 80%; max-width: 800px;">
+                        <h3>Browse for PDF File</h3>
+                        <div id="file-browser-path" style="padding: 10px; background: #f5f5f5; margin-bottom: 10px;">
+                            Current: <span id="current-path">Loading...</span>
+                        </div>
+                        <div id="file-browser-content" style="height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px;">
+                            Loading...
+                        </div>
+                        <div class="modal-buttons">
+                            <button onclick="document.getElementById('file-browser-modal').style.display='none'">Cancel</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+            }
+            
+            modal.style.display = 'flex';
+            await browsePath('');
+        }
+        
+        // Browse specific path
+        async function browsePath(path) {
+            try {
+                const response = await fetch(`http://localhost:5000/api/browse?path=${encodeURIComponent(path)}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    updateFileBrowserContent(data);
+                }
+            } catch (error) {
+                console.error('Error browsing:', error);
+            }
+        }
+        
+        // Update file browser content
+        function updateFileBrowserContent(data) {
+            const pathSpan = document.getElementById('current-path');
+            const content = document.getElementById('file-browser-content');
+            
+            pathSpan.textContent = data.current_dir;
+            
+            let html = '';
+            
+            // Add parent directory if available
+            if (data.parent) {
+                html += `<div onclick="browsePath('${data.parent}')" style="cursor: pointer; padding: 5px; hover: background: #f0f0f0;">
+                    📁 ../ (Parent Directory)
+                </div>`;
+            }
+            
+            // Add folders
+            data.folders.forEach(folder => {
+                html += `<div onclick="browsePath('${folder.path.replace(/\\/g, '\\\\')}')" 
+                         style="cursor: pointer; padding: 5px; hover: background: #f0f0f0;">
+                    📁 ${folder.name}
+                </div>`;
+            });
+            
+            // Add PDF files
+            data.files.forEach(file => {
+                html += `<div onclick="selectFileFromBrowser('${file.path.replace(/\\/g, '\\\\')}')" 
+                         style="cursor: pointer; padding: 5px; hover: background: #f0f0f0;">
+                    📄 ${file.name} (${Math.round(file.size / 1024)}KB)
+                </div>`;
+            });
+            
+            if (data.folders.length === 0 && data.files.length === 0) {
+                html = '<div style="padding: 20px; text-align: center; color: #999;">No PDF files found in this directory</div>';
+            }
+            
+            content.innerHTML = html;
+        }
+        
+        // Select file from browser
+        async function selectFileFromBrowser(path) {
+            currentPDFPath = path;
+            const fileName = path.split(/[/\\]/).pop();
+            
+            // Close modal
+            document.getElementById('file-browser-modal').style.display = 'none';
+            
+            // Load the PDF file
+            try {
+                const response = await fetch(path);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const file = new File([blob], fileName, { type: 'application/pdf' });
+                    
+                    // Create a data transfer to simulate file input
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    pdfInput.files = dataTransfer.files;
+                    
+                    // Trigger file select handler
+                    const event = new Event('change', { bubbles: true });
+                    pdfInput.dispatchEvent(event);
+                    
+                    setStatus(`Loaded: ${fileName} with full path available`);
+                }
+            } catch (error) {
+                console.error('Error loading file:', error);
+                alert('Could not load the selected file');
+            }
+        }
+        
+        // ============================================================
         // SERVER DETECTION AND HYBRID SESSION MANAGEMENT
         // ============================================================
         
@@ -5081,6 +5374,7 @@
             const statusText = document.getElementById('server-status-text-inline');
             const statusContainer = document.getElementById('server-status-inline');
             const exportLocalBtn = document.getElementById('export-local');
+            const browseServerBtn = document.getElementById('browse-server');
             
             if (statusIcon && statusText && statusContainer) {
                 if (available) {
@@ -5099,6 +5393,11 @@
             // Show/hide export to local button based on server availability
             if (exportLocalBtn) {
                 exportLocalBtn.style.display = available && extractions.length > 0 ? 'inline-block' : 'none';
+            }
+            
+            // Show/hide browse server button based on server availability
+            if (browseServerBtn) {
+                browseServerBtn.style.display = available ? 'inline-block' : 'none';
             }
         }
         
@@ -5365,6 +5664,11 @@
                             
                             // Hide progress modal
                             progressModal.style.display = 'none';
+                            
+                            // Remember this path for future use
+                            if (currentPDFFile && result.path) {
+                                addToRecentFiles(currentPDFFile.name, currentPDFPath, currentPDFFile.size);
+                            }
                             
                             setStatus(`✅ Exported to folder: ${result.filename}`);
                             alert(`Export saved successfully!\n\nFolder: ${result.filename}\n\nFull path: ${result.path}\n\nAll files have been extracted to this folder.`);
