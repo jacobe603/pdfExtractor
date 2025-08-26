@@ -341,11 +341,16 @@ def export_to_local():
         if not pdf_path or not zip_data:
             return jsonify({'error': 'Missing pdf_path or zip_data'}), 400
         
+        # Remove any surrounding quotes from the path
+        pdf_path = pdf_path.strip('"').strip("'")
+        
+        print(f"Received PDF path: {pdf_path}", flush=True)
+        
         # Convert Windows path to WSL path if necessary
         if pdf_path.startswith('C:\\') or pdf_path.startswith('c:\\'):
             # Convert C:\Users\... to /mnt/c/Users/...
             pdf_path = pdf_path.replace('C:\\', '/mnt/c/').replace('c:\\', '/mnt/c/').replace('\\', '/')
-            print(f"Converted Windows path to WSL: {pdf_path}")
+            print(f"Converted Windows path to WSL: {pdf_path}", flush=True)
         
         # Get directory and name of PDF
         pdf_dir = os.path.dirname(pdf_path)
@@ -353,13 +358,19 @@ def export_to_local():
         
         # Create export filename with timestamp
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        export_name = f"{pdf_name}_extractions_{timestamp}.zip"
+        # Limit filename length to avoid issues
+        safe_pdf_name = pdf_name[:50] if len(pdf_name) > 50 else pdf_name
+        export_name = f"{safe_pdf_name}_extractions_{timestamp}.zip"
         export_path = os.path.join(pdf_dir, export_name)
+        
+        print(f"Saving export to: {export_path}", flush=True)
         
         # Decode and save ZIP file
         zip_bytes = base64.b64decode(zip_data)
         with open(export_path, 'wb') as f:
             f.write(zip_bytes)
+        
+        print(f"Export saved successfully: {export_path}", flush=True)
         
         return jsonify({
             'success': True,

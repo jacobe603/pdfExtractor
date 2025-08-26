@@ -5216,7 +5216,8 @@
                     return; // User cancelled
                 }
                 
-                currentPDFPath = suggestedPath;
+                // Remove any quotes the user might have added
+                currentPDFPath = suggestedPath.trim().replace(/^["']|["']$/g, '');
             }
             
             if (!currentPDFPath) {
