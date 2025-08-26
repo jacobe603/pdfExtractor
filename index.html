@@ -5316,9 +5316,16 @@
             // Close modal
             document.getElementById('file-browser-modal').style.display = 'none';
             
-            // Load the PDF file
+            // Load the PDF file through server
             try {
-                const response = await fetch(path);
+                setStatus(`Loading ${fileName}...`);
+                
+                const response = await fetch('http://localhost:5000/api/load-pdf', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: path })
+                });
+                
                 if (response.ok) {
                     const blob = await response.blob();
                     const file = new File([blob], fileName, { type: 'application/pdf' });
@@ -5332,11 +5339,17 @@
                     const event = new Event('change', { bubbles: true });
                     pdfInput.dispatchEvent(event);
                     
+                    // Add to recent files
+                    addToRecentFiles(fileName, path, blob.size);
+                    
                     setStatus(`Loaded: ${fileName} with full path available`);
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to load PDF');
                 }
             } catch (error) {
                 console.error('Error loading file:', error);
-                alert('Could not load the selected file');
+                alert('Could not load the selected file: ' + error.message);
             }
         }
         

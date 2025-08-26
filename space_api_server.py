@@ -612,6 +612,36 @@ def find_file():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/load-pdf', methods=['POST'])
+def load_pdf():
+    """Load a PDF file from the server."""
+    try:
+        data = request.get_json()
+        pdf_path = data.get('path')
+        
+        if not pdf_path:
+            return jsonify({'error': 'No path provided'}), 400
+        
+        # Convert Windows path to WSL path if necessary
+        if pdf_path.startswith('C:\\') or pdf_path.startswith('c:\\'):
+            pdf_path = pdf_path.replace('C:\\', '/mnt/c/').replace('c:\\', '/mnt/c/').replace('\\', '/')
+        
+        # Check if file exists
+        if not os.path.exists(pdf_path):
+            return jsonify({'error': f'File not found: {pdf_path}'}), 404
+        
+        # Check if it's a PDF
+        if not pdf_path.lower().endswith('.pdf'):
+            return jsonify({'error': 'Not a PDF file'}), 400
+        
+        # Send the file
+        return send_file(pdf_path, mimetype='application/pdf', as_attachment=False)
+        
+    except Exception as e:
+        print(f"Error loading PDF: {str(e)}", flush=True)
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/file/info', methods=['POST'])
 def get_file_info():
     """Get file path information for uploaded file."""
