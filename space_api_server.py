@@ -332,8 +332,11 @@ def delete_session():
 
 @app.route('/api/export/local', methods=['POST'])
 def export_to_local():
-    """Export ZIP to same directory as PDF."""
+    """Export as folder structure to same directory as PDF."""
     try:
+        import zipfile
+        import shutil
+        
         data = request.get_json()
         pdf_path = data.get('pdf_path')
         zip_data = data.get('zip_data')  # Base64 encoded ZIP
@@ -356,31 +359,53 @@ def export_to_local():
         pdf_dir = os.path.dirname(pdf_path)
         pdf_name = os.path.splitext(os.path.basename(pdf_path))[0]
         
-        # Create export filename with timestamp
+        # Create export folder name with timestamp
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         # Limit filename length to avoid issues
         safe_pdf_name = pdf_name[:50] if len(pdf_name) > 50 else pdf_name
-        export_name = f"{safe_pdf_name}_extractions_{timestamp}.zip"
-        export_path = os.path.join(pdf_dir, export_name)
+        export_folder_name = f"{safe_pdf_name}_extractions_{timestamp}"
+        export_folder_path = os.path.join(pdf_dir, export_folder_name)
         
-        print(f"Saving export to: {export_path}", flush=True)
+        print(f"Creating export folder: {export_folder_path}", flush=True)
         
-        # Decode and save ZIP file
+        # Create temporary ZIP file first
+        temp_zip_path = os.path.join(pdf_dir, f"temp_{timestamp}.zip")
+        
+        # Decode and save ZIP file temporarily
         zip_bytes = base64.b64decode(zip_data)
-        with open(export_path, 'wb') as f:
+        with open(temp_zip_path, 'wb') as f:
             f.write(zip_bytes)
         
-        print(f"Export saved successfully: {export_path}", flush=True)
-        
-        return jsonify({
-            'success': True,
-            'path': export_path,
-            'filename': export_name,
-            'message': f'Exported to {export_name}'
-        })
+        # Extract ZIP to folder
+        try:
+            # Create the export folder
+            os.makedirs(export_folder_path, exist_ok=True)
+            
+            # Extract ZIP contents to folder
+            with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+                zip_ref.extractall(export_folder_path)
+            
+            print(f"Export folder created successfully: {export_folder_path}", flush=True)
+            
+            # Clean up temporary ZIP file
+            os.remove(temp_zip_path)
+            
+            return jsonify({
+                'success': True,
+                'path': export_folder_path,
+                'filename': export_folder_name,
+                'message': f'Exported to folder: {export_folder_name}',
+                'is_folder': True
+            })
+            
+        except Exception as extract_error:
+            # Clean up temp file if extraction fails
+            if os.path.exists(temp_zip_path):
+                os.remove(temp_zip_path)
+            raise extract_error
         
     except Exception as e:
-        print(f"Error exporting to local: {str(e)}")
+        print(f"Error exporting to local: {str(e)}", flush=True)
         return jsonify({'error': str(e)}), 500
 
 

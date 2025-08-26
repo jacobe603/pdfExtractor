@@ -5245,7 +5245,7 @@
             progressTitle.textContent = 'Exporting to PDF Folder';
             progressFill.style.width = '0%';
             progressFill.textContent = '0%';
-            progressText.textContent = `Preparing ${extractions.length} extractions for local export...`;
+            progressText.textContent = `Preparing ${extractions.length} extractions for folder export...`;
             
             try {
                 // Generate the ZIP file (reuse existing export logic)
@@ -5336,7 +5336,7 @@
                     const base64data = reader.result.split(',')[1];
                     
                     // Update progress for server upload
-                    progressText.textContent = 'Saving to PDF folder...';
+                    progressText.textContent = 'Creating folder structure...';
                     progressFill.style.width = '90%';
                     progressFill.textContent = '90%';
                     
@@ -5366,8 +5366,8 @@
                             // Hide progress modal
                             progressModal.style.display = 'none';
                             
-                            setStatus(`✅ Exported to: ${result.filename}`);
-                            alert(`Export saved successfully!\n\nFile: ${result.filename}\n\nFull path: ${result.path}`);
+                            setStatus(`✅ Exported to folder: ${result.filename}`);
+                            alert(`Export saved successfully!\n\nFolder: ${result.filename}\n\nFull path: ${result.path}\n\nAll files have been extracted to this folder.`);
                         } else {
                             const errorData = await response.json();
                             throw new Error(errorData.error || 'Export failed');
