@@ -242,15 +242,23 @@
             width: 100%;
             height: 100%;
             background-color: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal.show {
+            display: flex;
         }
 
         .modal-content {
             background-color: white;
-            margin: 15% auto;
+            margin: 5vh auto;
             padding: 30px;
             border-radius: 8px;
-            width: 400px;
+            width: 800px;
             max-width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
         }
 
         .modal h3 {
@@ -508,6 +516,100 @@
             100% { transform: rotate(360deg); }
         }
 
+        /* OCR Results Modal Styles */
+        #ocr-results-modal .modal-content {
+            width: 800px;
+            max-width: 90%;
+            max-height: 85vh;
+        }
+
+        #ocr-content-display {
+            font-family: 'Courier New', Monaco, monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            user-select: text;
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+        }
+
+        #ocr-content-display.table-format {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            white-space: normal;
+        }
+
+        #ocr-content-display.table-format table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0;
+            font-size: 11px;
+        }
+
+        #ocr-content-display.table-format th,
+        #ocr-content-display.table-format td {
+            border: 1px solid #dee2e6;
+            padding: 8px 6px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        #ocr-content-display.table-format th {
+            background-color: #e9ecef;
+            font-weight: bold;
+            font-size: 10px;
+        }
+
+        #ocr-content-display.table-format tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+
+        #ocr-content-display.table-format tr:hover {
+            background-color: #e3f2fd;
+        }
+
+        #ocr-notes-content {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            padding: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 13px;
+            line-height: 1.5;
+            user-select: text;
+            -webkit-user-select: text;
+            -moz-user-select: text;
+            -ms-user-select: text;
+        }
+
+        #ocr-notes-content ol {
+            margin: 0;
+            padding-left: 20px;
+        }
+
+        #ocr-notes-content li {
+            margin-bottom: 8px;
+            text-align: left;
+        }
+
+        #ocr-metadata {
+            background: #e9ecef;
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 11px;
+            color: #6c757d;
+            margin-top: 15px;
+        }
+
     </style>
 </head>
 <body>
@@ -557,9 +659,37 @@
         </div>
 
         <div class="sidebar">
+            <!-- Session Controls -->
+            <div class="session-controls" style="margin-bottom: 15px; padding: 10px; background: rgba(52, 73, 94, 0.3); border-radius: 4px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 12px; color: #95a5a6;">
+                        Session: <span id="session-info" style="color: #ecf0f1;">No session</span>
+                    </span>
+                    <div style="display: flex; gap: 5px;">
+                        <button onclick="exportSession()" class="btn" style="font-size: 11px; padding: 4px 8px; background: #16a085;" title="Export Session">
+                            💾 Export
+                        </button>
+                        <input type="file" id="import-session-input" accept=".json" style="display: none;" 
+                               onchange="importSession(this.files[0])">
+                        <button onclick="document.getElementById('import-session-input').click()" 
+                                class="btn" style="font-size: 11px; padding: 4px 8px; background: #2980b9;" title="Import Session">
+                            📂 Import
+                        </button>
+                        <button onclick="clearCurrentSession()" class="btn" style="font-size: 11px; padding: 4px 8px; background: #c0392b;" 
+                                title="Clear Session">
+                            🗑️ Clear
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <h3 style="margin: 0;">Extracted Schedules</h3>
-                <button class="btn" id="extract-all" disabled style="font-size: 12px; padding: 6px 12px;">Extract All</button>
+                <h3 style="margin: 0;" id="extraction-header">Extracted Schedules</h3>
+                <div style="display: flex; gap: 5px; align-items: center;">
+                    <button class="btn" id="edit-selected" style="font-size: 12px; padding: 6px 12px; background: #3498db; display: none;">Edit Selected</button>
+                    <button class="btn" id="manage-all" style="font-size: 12px; padding: 6px 12px; background: #9b59b6; display: none;">Manage All</button>
+                    <button class="btn" id="extract-all" disabled style="font-size: 12px; padding: 6px 12px;">Extract All</button>
+                </div>
             </div>
             <div class="extraction-list" id="extraction-list">
                 <p style="color: #7f8c8d; font-style: italic;">No schedules extracted yet</p>
@@ -585,7 +715,7 @@
     <div id="schedule-modal" class="modal">
         <div class="modal-content">
             <h3>Extraction Information</h3>
-            <!-- 1. Equipment Type (moved to top) -->
+            <!-- 1. Equipment Type -->
             <div class="form-group">
                 <label for="equipment-type">Equipment Type:</label>
                 <select id="equipment-type">
@@ -603,7 +733,40 @@
                 <input type="text" id="custom-equipment-type" placeholder="e.g., CHILLERS, PUMPS" style="text-transform: uppercase;">
             </div>
             
-            <!-- Search Text Section -->
+            <!-- 2. Extraction Name -->
+            <div class="form-group">
+                <label for="extraction-name">Extraction Name:</label>
+                <input type="text" id="extraction-name" placeholder="Auto-generated from type selections">
+            </div>
+            
+            <!-- 3. Extraction Type -->
+            <div class="form-group">
+                <label for="extraction-type">Extraction Type:</label>
+                <select id="extraction-type">
+                    <option value="schedule">Schedule</option>
+                    <option value="drawing">Drawing</option>
+                    <option value="table">Table</option>
+                    <option value="detail">Detail</option>
+                    <option value="specification">Specification</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            
+            <!-- 4. Extraction Description -->
+            <div class="form-group">
+                <label for="extraction-description">Extraction Description:</label>
+                <input type="text" id="extraction-description" placeholder="Brief description of the extraction">
+            </div>
+            
+            <!-- 5. RFQ Required -->
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="rfq-required" style="margin-right: 5px;">
+                    RFQ Required (needs 3rd party quote)
+                </label>
+            </div>
+            
+            <!-- 6. Search Text in Selection -->
             <div class="form-group">
                 <label for="search-input">Search Text in Selection:</label>
                 <div class="search-controls">
@@ -627,47 +790,18 @@
                 </div>
             </div>
             
-            <!-- 2. Extraction Type (moved to second) -->
-            <div class="form-group">
-                <label for="extraction-type">Extraction Type:</label>
-                <select id="extraction-type">
-                    <option value="schedule">Schedule</option>
-                    <option value="drawing">Drawing</option>
-                    <option value="table">Table</option>
-                    <option value="detail">Detail</option>
-                    <option value="specification">Specification</option>
-                    <option value="other">Other</option>
-                </select>
-            </div>
-            <!-- 3. Extraction Name (moved to third, will auto-populate) -->
-            <div class="form-group">
-                <label for="extraction-name">Extraction Name:</label>
-                <input type="text" id="extraction-name" placeholder="Auto-generated from type selections">
-            </div>
-            <!-- 4. RFQ Required (new field) -->
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="rfq-required" style="margin-right: 5px;">
-                    RFQ Required (needs 3rd party quote)
-                </label>
-            </div>
-            <!-- 5. Description -->
-            <div class="form-group">
-                <label for="extraction-description">Description:</label>
-                <input type="text" id="extraction-description" placeholder="Brief description of the extraction">
-            </div>
-            <!-- 6. Extract Table with OCR (cleaned up, no debug) -->
+            <!-- 7. Extract Table with OCR -->
             <div class="form-group">
                 <label>
                     <input type="checkbox" id="enable-table-ocr" style="margin-right: 5px;">
                     Extract Table with OCR (processed in background)
                 </label>
                 <div id="table-ocr-status" style="display: none; margin-top: 5px; font-size: 12px; color: #666;">
-                    Processing...
-                </div>
-                <div id="markdown-output" style="display: none; margin-top: 10px; padding: 10px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; font-family: monospace; font-size: 12px; white-space: pre-wrap; max-height: 200px; overflow-y: auto;">
+                    <!-- OCR status will be shown here when processing -->
                 </div>
             </div>
+            
+            <!-- 8. OCR Provider -->
             <div class="form-group" id="ocr-config-group" style="display: none;">
                 <label for="ocr-provider">OCR Provider:</label>
                 <select id="ocr-provider" style="margin-bottom: 10px;">
@@ -798,6 +932,76 @@
         </div>
     </div>
 
+    <!-- Bulk Edit Modal - REMOVED (multi-selection feature removed) -->
+    <!-- Keeping Manage All Modal below for mass editing all extractions -->
+    
+    <!-- Manage All Modal -->
+    <div id="manage-all-modal" class="modal">
+        <div class="modal-content" style="width: 90%; max-width: 1000px;">
+            <span class="close" onclick="closeManageAllModal()">&times;</span>
+            <h3>Manage All Extractions</h3>
+            <div style="margin: 15px 0;">
+                <button class="btn" onclick="saveManageAllChanges()" style="background: #27ae60;">Save Changes</button>
+                <button class="btn-secondary" onclick="closeManageAllModal()">Cancel</button>
+                <span id="manage-all-status" style="margin-left: 15px; color: #666;"></span>
+            </div>
+            <div style="overflow-x: auto;">
+                <table id="manage-all-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f0f0f0; border-bottom: 2px solid #ddd;">
+                            <th style="padding: 10px; text-align: left;">Name</th>
+                            <th style="padding: 10px; text-align: left; width: 150px;">Equipment Type</th>
+                            <th style="padding: 10px; text-align: center; width: 60px;">Page</th>
+                            <th style="padding: 10px; text-align: center; width: 80px;">OCR</th>
+                            <th style="padding: 10px; text-align: center; width: 60px;">RFQ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="manage-all-tbody">
+                        <!-- Rows will be populated here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- OCR Results Modal -->
+    <div id="ocr-results-modal" class="modal">
+        <div class="modal-content" style="width: 800px;">
+            <span class="close" onclick="closeOCRResultsModal()">&times;</span>
+            <h3 id="ocr-results-title">OCR Results</h3>
+            
+            <!-- Toggle between markdown and formatted table -->
+            <div style="margin-bottom: 15px;">
+                <label style="display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" id="ocr-format-toggle" style="margin: 0;">
+                    <span>Show as formatted table (uncheck for raw markdown)</span>
+                </label>
+            </div>
+            
+            <!-- OCR Content Display -->
+            <div id="ocr-content-display" style="background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; padding: 15px; max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 12px; line-height: 1.4; white-space: pre-wrap; user-select: text; -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text;">
+                <!-- OCR results will be displayed here -->
+            </div>
+            
+            <!-- Installation Notes Section -->
+            <div id="ocr-notes-section" style="display: none; margin-top: 15px;">
+                <h4 style="margin-bottom: 10px; color: #2c3e50;">Installation Notes & Requirements</h4>
+                <div id="ocr-notes-content" style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; padding: 15px; max-height: 200px; overflow-y: auto; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; font-size: 13px; line-height: 1.5; user-select: text; -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text;">
+                    <!-- Notes will be displayed here -->
+                </div>
+            </div>
+            
+            <!-- OCR Metadata -->
+            <div id="ocr-metadata" style="margin-top: 15px; padding: 10px; background: #e9ecef; border-radius: 4px; font-size: 11px; color: #6c757d;">
+                <!-- OCR provider and confidence info -->
+            </div>
+            
+            <div class="modal-buttons">
+                <button class="btn-secondary" id="ocr-modal-close">Close</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Initialize PDF.js
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -805,6 +1009,7 @@
         // Application state
         let currentPDF = null;
         let currentPDFData = null; // Store original PDF data for annotation
+        let currentPDFFile = null; // Store the File object for session management
         let currentPage = 1;
         let totalPages = 0;
         let canvas = null;
@@ -1103,8 +1308,9 @@
                 height: Math.abs(y1 - y0)
             };
             
-            // Store the selection for the modal
+            // Store the selection for the modal with space reference
             currentSelection = selection;
+            currentSelection.spaceXref = space.xref; // Store space reference for later
             
             // Pre-populate modal fields with space data
             const modal = document.getElementById('schedule-modal');
@@ -1126,7 +1332,7 @@
             document.getElementById('rfq-required').checked = false;
             
             // Show the modal
-            modal.style.display = 'block';
+            modal.style.display = 'flex';
             document.getElementById('extraction-name').focus();
             
             setStatus(`Converting BlueBeam Space "${space.title}" to extraction...`);
@@ -1197,7 +1403,7 @@
             const progressFill = document.getElementById('progress-fill');
             const progressText = document.getElementById('progress-text');
             
-            progressModal.style.display = 'block';
+            progressModal.style.display = 'flex';
             progressTitle.textContent = `Importing ${totalSpaces} BlueBeam Spaces`;
             progressFill.style.width = '0%';
             progressText.textContent = `Processing space 0 of ${totalSpaces}...`;
@@ -1282,10 +1488,8 @@
                         height: Math.abs(y1 - y0)
                     };
                     
-                    // Extract image from the space area
-                    const imageData = await extractImageFromSelection(selection);
-                    
-                    // Create extraction object
+                    // Create extraction object WITHOUT extracting image (for performance)
+                    // Image will be extracted on-demand when needed
                     const extraction = {
                         id: generateExtractionUID(),
                         legacyId: ++extractionCounter,
@@ -1295,12 +1499,13 @@
                         description: space.subject || space.content || '',
                         rfqRequired: false,
                         coordinates: selection,
-                        imageData: imageData,
+                        imageData: null, // Defer image extraction for performance
                         ocrData: null,
                         ocrStatus: 'none',
                         timestamp: new Date().toISOString(),
                         isBlueBeamSpace: true,
-                        spaceXref: space.xref
+                        spaceXref: space.xref,
+                        needsImageExtraction: true // Flag to indicate image needs extraction
                     };
                     
                     extractions.push(extraction);
@@ -1381,7 +1586,7 @@
             populateSettingsModal();
             
             // Show modal
-            modal.style.display = 'block';
+            modal.style.display = 'flex';
         }
         
         function closeSettingsModal() {
@@ -1593,6 +1798,11 @@
             zoomInBtn.addEventListener('click', zoomIn);
             zoomOutBtn.addEventListener('click', zoomOut);
             
+            const manageAllBtn = document.getElementById('manage-all');
+            if (manageAllBtn) {
+                manageAllBtn.addEventListener('click', openManageAllModal);
+            }
+            
             // Text extraction toggle
             document.getElementById('enable-text-extraction').addEventListener('change', function(e) {
                 enableTextExtraction = e.target.checked;
@@ -1605,6 +1815,7 @@
                     });
                 }
             });
+            
             
             // Mouse wheel zoom
             canvas.addEventListener('wheel', handleMouseWheel, { passive: false });
@@ -1624,6 +1835,10 @@
             document.getElementById('modal-cancel').addEventListener('click', closeModal);
             document.getElementById('modal-save').addEventListener('click', saveSchedule);
             document.getElementById('enable-table-ocr').addEventListener('change', toggleTableOCR);
+            
+            // OCR Results Modal event listeners
+            document.getElementById('ocr-modal-close').addEventListener('click', closeOCRResultsModal);
+            document.getElementById('ocr-format-toggle').addEventListener('change', handleOCRFormatToggle);
             document.getElementById('equipment-type').addEventListener('change', handleEquipmentTypeChange);
             document.getElementById('extraction-type').addEventListener('change', handleExtractionTypeChange);
             document.getElementById('custom-equipment-type').addEventListener('input', handleCustomEquipmentTypeChange);
@@ -1644,6 +1859,14 @@
             modal.addEventListener('click', function(e) {
                 if (e.target === modal) {
                     closeModal();
+                }
+            });
+            
+            // Close OCR results modal when clicking outside
+            const ocrModal = document.getElementById('ocr-results-modal');
+            ocrModal.addEventListener('click', function(e) {
+                if (e.target === ocrModal) {
+                    closeOCRResultsModal();
                 }
             });
 
@@ -1674,6 +1897,59 @@
             const file = event.target.files[0];
             if (!file) return;
 
+            // Store file reference for session management
+            currentPDFFile = file;
+            
+            // Clear BlueBeam Spaces from previous PDF
+            if (spaceManager) {
+                spaceManager.clearOverlays();
+                spaceManager.spaces = [];
+                spaceManager.pageSpaces = {};
+                spaceManager.importedSpaces = new Set();
+                spaceManager.pageInfo = {};
+                
+                // Hide spaces UI sections
+                const spacesSection = document.getElementById('spaces-section');
+                if (spacesSection) {
+                    spacesSection.style.display = 'none';
+                }
+                const detectBtn = document.getElementById('detect-spaces');
+                const importBtn = document.getElementById('import-all-spaces');
+                const toggleBtn = document.getElementById('toggle-spaces');
+                if (detectBtn) detectBtn.textContent = '🔍 Detect Spaces';
+                if (importBtn) importBtn.style.display = 'none';
+                if (toggleBtn) toggleBtn.style.display = 'none';
+            }
+            
+            // Check for existing session
+            const hasSession = hasExistingSession(file.name);
+            let shouldLoadSession = false;
+            
+            if (hasSession) {
+                const session = loadSessionFromLocalStorage(file.name);
+                if (session) {
+                    const timeSince = getTimeSinceLastModified(session.lastModified);
+                    const message = `Found previous session for this PDF:\n` +
+                                   `• ${session.extractions.length} extractions\n` +
+                                   `• Last modified: ${timeSince}\n\n` +
+                                   `Resume session?`;
+                    
+                    shouldLoadSession = confirm(message);
+                    
+                    if (!shouldLoadSession) {
+                        // Ask if they want to clear the session
+                        if (confirm('Clear the existing session data?')) {
+                            clearSession(file.name);
+                        }
+                    }
+                }
+            }
+            
+            // Clear current extractions if loading a different PDF
+            if (!shouldLoadSession) {
+                resetExtractions();
+            }
+
             console.time('PDF Loading Total');
             setStatus('Loading PDF...');
             loading.style.display = 'block';
@@ -1698,7 +1974,23 @@
                 
                 canvasContainer.style.display = 'block';
                 loading.style.display = 'none';
-                setStatus('PDF loaded successfully. Click and drag to select schedule areas.');
+                
+                // Load session if requested
+                if (shouldLoadSession) {
+                    const session = loadSessionFromLocalStorage(file.name);
+                    if (session) {
+                        restoreSession(session);
+                        setStatus(`PDF loaded with ${session.extractions.length} extractions from saved session`);
+                        updateSessionStatus(`Session active (${session.extractions.length} extractions)`);
+                    } else {
+                        setStatus('PDF loaded successfully. Click and drag to select schedule areas.');
+                        updateSessionStatus('New session');
+                    }
+                } else {
+                    setStatus('PDF loaded successfully. Click and drag to select schedule areas.');
+                    updateSessionStatus('New session');
+                }
+                
                 console.timeEnd('PDF Loading Total');
                 
                 // Enable controls
@@ -1751,11 +2043,15 @@
                 // Clear temporary overlay only
                 clearTempOverlay();
                 
+                console.timeEnd(`Page ${pageNum} Setup Canvas`);
+                
+                // Normal rendering
                 const renderContext = {
                     canvasContext: ctx,
-                    viewport: viewport
+                    viewport: viewport,
+                    renderInteractiveForms: false, // Don't render form fields
+                    includeAnnotationStorage: false // Don't include annotations
                 };
-                console.timeEnd(`Page ${pageNum} Setup Canvas`);
                 
                 console.time(`Page ${pageNum} PDF Render`);
                 // Store current render operation
@@ -1763,6 +2059,7 @@
                 await currentRenderOperation.promise;
                 currentRenderOperation = null;
                 console.timeEnd(`Page ${pageNum} PDF Render`);
+                setStatus(`Page ${pageNum} rendered.`);
                 
                 // Extract text content asynchronously to avoid blocking page render (if enabled)
                 currentPageTextContent = null; // Clear immediately
@@ -1997,10 +2294,8 @@
             editingExtractionId = null; // Ensure we're not in editing mode
             
             // Clear ALL OCR UI elements thoroughly - use innerHTML to clear all content including HTML
-            document.getElementById('markdown-output').innerHTML = '';
             document.getElementById('table-ocr-status').innerHTML = '';
             document.getElementById('table-ocr-status').style.display = 'none';
-            document.getElementById('markdown-output').style.display = 'none';
             document.getElementById('ocr-config-group').style.display = 'none';
             document.getElementById('enable-table-ocr').checked = false;
             
@@ -2022,7 +2317,7 @@
             // Generate auto name after setting the types
             generateExtractionName();
             
-            modal.style.display = 'block';
+            modal.style.display = 'flex';
             document.getElementById('extraction-name').focus();
         }
 
@@ -2218,7 +2513,6 @@
         function toggleTableOCR() {
             const checkbox = document.getElementById('enable-table-ocr');
             const statusDiv = document.getElementById('table-ocr-status');
-            const outputDiv = document.getElementById('markdown-output');
             const configGroup = document.getElementById('ocr-config-group');
             
             // Add null checks for DOM elements
@@ -2331,7 +2625,6 @@
             }
             
             const statusDiv = document.getElementById('table-ocr-status');
-            const outputDiv = document.getElementById('markdown-output');
             
             try {
                 statusDiv.textContent = 'Processing image with OCR...';
@@ -2519,7 +2812,7 @@
         function closeModal() {
             modal.style.display = 'none';
             clearTempOverlay();
-            currentSelection = null;
+            currentSelection = null; // This also clears any spaceXref
             currentOCRResult = null; // Clear stored OCR result
             editingExtractionId = null; // Clear editing mode
             
@@ -2542,7 +2835,6 @@
             // Reset OCR table checkbox and completely clear OCR content (with null checks)
             const ocrCheckbox = document.getElementById('enable-table-ocr');
             const statusDiv = document.getElementById('table-ocr-status');
-            const markdownDiv = document.getElementById('markdown-output');
             const configGroup = document.getElementById('ocr-config-group');
             
             if (ocrCheckbox) ocrCheckbox.checked = false;
@@ -2550,10 +2842,7 @@
                 statusDiv.innerHTML = '';
                 statusDiv.style.display = 'none';
             }
-            if (markdownDiv) {
-                markdownDiv.innerHTML = '';
-                markdownDiv.style.display = 'none';
-            }
+            // Markdown output removed from modal
             if (configGroup) configGroup.style.display = 'none';
             
             // Clear OCR preview
@@ -2642,7 +2931,12 @@
                             imageData: imageData,
                             ocrData: ocrData !== null ? ocrData : existing.ocrData, // Use new OCR if provided, otherwise keep existing
                             ocrStatus: ocrData ? 'completed' : (existing.ocrData ? 'completed' : 'none'),
-                            lastModified: new Date().toISOString()
+                            lastModified: new Date().toISOString(),
+                            // Preserve space reference if it exists
+                            ...(existing.spaceXref && { 
+                                isBlueBeamSpace: existing.isBlueBeamSpace,
+                                spaceXref: existing.spaceXref 
+                            })
                         };
                         
                         setStatus(`${extractionType.charAt(0).toUpperCase() + extractionType.slice(1)} "${name}" updated successfully for ${finalEquipmentType}`);
@@ -2664,8 +2958,28 @@
                         imageData: imageData,
                         ocrData: ocrData,
                         ocrStatus: ocrData ? 'completed' : 'none',
-                        timestamp: new Date().toISOString()
+                        timestamp: new Date().toISOString(),
+                        // Add space reference if this was converted from a BlueBeam space
+                        ...(currentSelection.spaceXref && { 
+                            isBlueBeamSpace: true,
+                            spaceXref: currentSelection.spaceXref 
+                        })
                     };
+                    
+                    // Mark space as imported if it's from a BlueBeam space
+                    if (currentSelection.spaceXref && spaceManager && spaceManager.importedSpaces) {
+                        spaceManager.importedSpaces.add(currentSelection.spaceXref);
+                        
+                        // Re-render spaces to show checkmark
+                        const currentPageSpaces = spaceManager.getSpacesForPage(currentPage - 1);
+                        if (currentPageSpaces && currentPageSpaces.length > 0) {
+                            const pageInfo = spaceManager.pageInfo[currentPage - 1];
+                            const pageHeight = pageInfo?.height || 792;
+                            const pageWidth = pageInfo?.width || 612;
+                            const rotation = pageInfo?.rotation || 0;
+                            spaceManager.renderSpacesForPage(currentPage - 1, currentZoom, pageHeight, pageWidth, rotation);
+                        }
+                    }
                     
                     extractions.push(extraction);
                     setStatus(`${extractionType.charAt(0).toUpperCase() + extractionType.slice(1)} "${name}" extracted successfully for ${finalEquipmentType}`);
@@ -2794,6 +3108,12 @@
             const hasOCRData = extraction.ocrData && extraction.ocrData.success;
             
             if (hasOCRData && ocrStatus === 'completed') {
+                // Check if notes are present
+                const notes = extraction.ocrData?.notes || extraction.ocrData?.tableData?.notes;
+                const notesCount = notes?.count || 0;
+                if (notesCount > 0) {
+                    return `✅ 📝${notesCount}`; // Show checkmark with notes count
+                }
                 return '✅'; // Green checkmark - OCR completed successfully
             } else if (ocrStatus === 'processing') {
                 return '🕐'; // Clock - OCR processing in progress
@@ -2805,6 +3125,358 @@
                 return ''; // No OCR status icon
             }
         }
+        
+        function formatOCRResultsForDisplay(extraction) {
+            if (!extraction.ocrData || !extraction.ocrData.success) {
+                return '';
+            }
+            
+            let content = '';
+            
+            // Add the markdown table if available
+            if (extraction.ocrData.markdown) {
+                content += extraction.ocrData.markdown;
+            }
+            
+            // Add notes section if available
+            const notes = extraction.ocrData.notes || extraction.ocrData.tableData?.notes;
+            if (notes && notes.hasNotes && notes.entries && notes.entries.length > 0) {
+                content += '\n\n## Installation Notes & Requirements\n';
+                content += `**Total Notes:** ${notes.count}\n\n`;
+                
+                notes.entries.forEach((note, index) => {
+                    // Remove leading number if present (since we're adding our own)
+                    const cleanNote = note.replace(/^\d+\)\s*/, '');
+                    content += `${index + 1}. ${cleanNote}\n`;
+                });
+            }
+            
+            return content;
+        }
+        
+        function toggleOCRResults(extractionId) {
+            const resultsDiv = document.getElementById(`ocr-results-${extractionId}`);
+            const toggleBtn = document.getElementById(`ocr-toggle-${extractionId}`);
+            
+            if (resultsDiv) {
+                const isHidden = resultsDiv.style.display === 'none';
+                resultsDiv.style.display = isHidden ? 'block' : 'none';
+                if (toggleBtn) {
+                    toggleBtn.textContent = isHidden ? 'Hide Results' : 'View Results';
+                }
+            }
+        }
+
+        // Show OCR results in a dedicated modal
+        function showOCRResultsModal(extractionId) {
+            const extraction = extractions.find(e => e.id === extractionId);
+            if (!extraction || !extraction.ocrData) {
+                alert('No OCR data available for this extraction.');
+                return;
+            }
+
+            const modal = document.getElementById('ocr-results-modal');
+            const title = document.getElementById('ocr-results-title');
+            const contentDisplay = document.getElementById('ocr-content-display');
+            const notesSection = document.getElementById('ocr-notes-section');
+            const notesContent = document.getElementById('ocr-notes-content');
+            const metadata = document.getElementById('ocr-metadata');
+            const formatToggle = document.getElementById('ocr-format-toggle');
+
+            if (!modal || !title || !contentDisplay || !notesSection || !notesContent || !metadata || !formatToggle) {
+                console.error('OCR modal elements not found');
+                return;
+            }
+
+            // Set modal title
+            title.textContent = `OCR Results - ${extraction.extractionName || extraction.name || 'Extraction'}`;
+
+            // Store extraction data on modal for toggle function
+            modal.dataset.extractionId = extractionId;
+
+            // Reset format toggle to default (show formatted table if available)
+            formatToggle.checked = true;
+
+            // Display OCR content
+            displayOCRContent(extraction.ocrData, contentDisplay, formatToggle.checked);
+
+            // Display installation notes if available
+            const notes = extraction.ocrData.notes || extraction.ocrData.tableData?.notes;
+            if (notes && notes.hasNotes && notes.entries && notes.entries.length > 0) {
+                notesSection.style.display = 'block';
+                
+                let notesHTML = '<ol>';
+                notes.entries.forEach((note, index) => {
+                    // Remove leading number if present (since we're using ordered list)
+                    const cleanNote = note.replace(/^\d+\)\s*/, '').trim();
+                    notesHTML += `<li>${cleanNote}</li>`;
+                });
+                notesHTML += '</ol>';
+                
+                notesContent.innerHTML = notesHTML;
+            } else {
+                notesSection.style.display = 'none';
+            }
+
+            // Display metadata
+            const provider = extraction.ocrData.provider || 'Unknown';
+            const confidence = extraction.ocrData.confidence || 0;
+            const isTable = extraction.ocrData.tableData?.isTable || false;
+            
+            let metadataHTML = `<strong>Provider:</strong> ${provider} | <strong>Confidence:</strong> ${confidence.toFixed(1)}% | <strong>Table Detected:</strong> ${isTable ? 'Yes' : 'No'}`;
+            
+            if (isTable && extraction.ocrData.tableData) {
+                const tableData = extraction.ocrData.tableData.tableData || extraction.ocrData.tableData;
+                if (tableData.rows && tableData.columns) {
+                    metadataHTML += ` | <strong>Dimensions:</strong> ${tableData.rows} rows × ${tableData.columns} columns`;
+                }
+            }
+            
+            metadata.innerHTML = metadataHTML;
+
+            // Show modal
+            modal.style.display = 'block';
+        }
+
+        // Display OCR content based on format toggle
+        function displayOCRContent(ocrData, contentDisplay, showFormatted) {
+            if (!ocrData || !contentDisplay) return;
+
+            if (showFormatted && ocrData.tableData?.isTable) {
+                // Show as formatted HTML table
+                contentDisplay.className = 'table-format';
+                const tableHTML = convertMarkdownToTable(ocrData.markdown);
+                if (tableHTML) {
+                    contentDisplay.innerHTML = tableHTML;
+                } else {
+                    // Fallback to markdown text
+                    contentDisplay.className = '';
+                    contentDisplay.textContent = ocrData.markdown || ocrData.text || ocrData.rawText || 'No content available';
+                }
+            } else {
+                // Show as raw markdown/text
+                contentDisplay.className = '';
+                contentDisplay.textContent = ocrData.markdown || ocrData.text || ocrData.rawText || 'No content available';
+            }
+        }
+
+        // Convert markdown table to HTML table
+        function convertMarkdownToTable(markdown) {
+            if (!markdown || typeof markdown !== 'string') return null;
+
+            const lines = markdown.trim().split('\n');
+            if (lines.length < 3) return null; // Need at least header, separator, and one data row
+
+            let tableHTML = '<table>';
+            let headerProcessed = false;
+            let separatorSkipped = false;
+
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                
+                // Skip empty lines
+                if (!trimmedLine) continue;
+                
+                // Skip separator lines (contains only |, -, and spaces)
+                if (/^[\|\-\s]+$/.test(trimmedLine)) {
+                    separatorSkipped = true;
+                    continue;
+                }
+                
+                // Process table rows
+                if (trimmedLine.startsWith('|') && trimmedLine.endsWith('|')) {
+                    const cells = trimmedLine.split('|').slice(1, -1).map(cell => cell.trim());
+                    
+                    if (!headerProcessed) {
+                        // Process header row
+                        tableHTML += '<thead><tr>';
+                        cells.forEach(cell => {
+                            tableHTML += `<th>${cell}</th>`;
+                        });
+                        tableHTML += '</tr></thead><tbody>';
+                        headerProcessed = true;
+                    } else if (separatorSkipped) {
+                        // Process data rows
+                        tableHTML += '<tr>';
+                        cells.forEach(cell => {
+                            tableHTML += `<td>${cell}</td>`;
+                        });
+                        tableHTML += '</tr>';
+                    }
+                }
+            }
+
+            tableHTML += '</tbody></table>';
+            
+            // Validate that we have at least some table content
+            if (!headerProcessed) return null;
+            
+            return tableHTML;
+        }
+
+        // Handle format toggle change
+        function handleOCRFormatToggle() {
+            const modal = document.getElementById('ocr-results-modal');
+            const extractionId = modal?.dataset?.extractionId;
+            
+            if (!extractionId) return;
+            
+            const extraction = extractions.find(e => e.id === extractionId);
+            if (!extraction || !extraction.ocrData) return;
+            
+            const contentDisplay = document.getElementById('ocr-content-display');
+            const formatToggle = document.getElementById('ocr-format-toggle');
+            
+            if (contentDisplay && formatToggle) {
+                displayOCRContent(extraction.ocrData, contentDisplay, formatToggle.checked);
+            }
+        }
+
+        // Close OCR results modal
+        function closeOCRResultsModal() {
+            const modal = document.getElementById('ocr-results-modal');
+            if (modal) {
+                modal.style.display = 'none';
+                // Clear stored extraction ID
+                delete modal.dataset.extractionId;
+            }
+        }
+        
+        // Bulk Edit Modal functions removed - use Manage All instead
+        // function openBulkEditModal() - removed
+        
+        // function closeBulkEditModal() - removed
+        
+        
+        function openManageAllModal() {
+            const modal = document.getElementById('manage-all-modal');
+            const tbody = document.getElementById('manage-all-tbody');
+            
+            if (!modal || !tbody) return;
+            
+            // Get equipment types from settings
+            const equipmentTypes = getEquipmentTypesFromSettings();
+            
+            // Clear and populate table
+            tbody.innerHTML = '';
+            
+            extractions.forEach((extraction, index) => {
+                const row = document.createElement('tr');
+                row.style.borderBottom = '1px solid #eee';
+                row.dataset.extractionId = extraction.id;
+                
+                // Build equipment type options
+                const equipmentOptions = equipmentTypes
+                    .filter(type => type.value !== 'CUSTOM') // Skip CUSTOM option
+                    .map(type => {
+                        const selected = extraction.equipmentType === type.value ? 'selected' : '';
+                        return `<option value="${type.value}" ${selected}>${type.label || type.value}</option>`;
+                    })
+                    .join('');
+                
+                row.innerHTML = `
+                    <td style="padding: 8px;">${extraction.extractionName || extraction.name}</td>
+                    <td style="padding: 8px;">
+                        <select class="equipment-type-select" data-extraction-id="${extraction.id}" style="width: 100%; padding: 4px;">
+                            ${equipmentOptions}
+                        </select>
+                    </td>
+                    <td style="padding: 8px; text-align: center;">${extraction.coordinates?.page || '?'}</td>
+                    <td style="padding: 8px; text-align: center;">${extraction.ocrData?.success ? '✓' : '-'}</td>
+                    <td style="padding: 8px; text-align: center;">${extraction.rfqRequired ? '✓' : '-'}</td>
+                `;
+                
+                tbody.appendChild(row);
+            });
+            
+            modal.style.display = 'block';
+        }
+        
+        function closeManageAllModal() {
+            const modal = document.getElementById('manage-all-modal');
+            if (modal) {
+                modal.style.display = 'none';
+            }
+        }
+        
+        function saveManageAllChanges() {
+            const selects = document.querySelectorAll('.equipment-type-select');
+            let changeCount = 0;
+            
+            selects.forEach(select => {
+                const extractionId = select.dataset.extractionId;
+                const newType = select.value;
+                const extraction = extractions.find(e => e.id === extractionId);
+                
+                if (extraction && extraction.equipmentType !== newType) {
+                    extraction.equipmentType = newType;
+                    if (extraction.type) delete extraction.type;
+                    changeCount++;
+                }
+            });
+            
+            if (changeCount > 0) {
+                saveToLocalStorage();
+                updateExtractionList();
+                restoreSelectionsForPage(currentPage);
+                
+                const statusSpan = document.getElementById('manage-all-status');
+                if (statusSpan) {
+                    statusSpan.textContent = `Saved ${changeCount} change${changeCount !== 1 ? 's' : ''}`;
+                    setTimeout(() => {
+                        statusSpan.textContent = '';
+                    }, 3000);
+                }
+            }
+            
+            closeManageAllModal();
+        }
+        
+        function getEquipmentTypesFromSettings() {
+            const settings = window.settingsManager ? window.settingsManager.getSettings() : null;
+            if (settings && settings.equipmentTypes) {
+                return settings.equipmentTypes;
+            }
+            // Fallback if settings not loaded
+            return [
+                { value: 'FANS', label: 'FANS (Fan Equipment)' },
+                { value: 'VAV', label: 'VAV (Variable Air Volume)' },
+                { value: 'RTU', label: 'RTU (Roof Top Units)' },
+                { value: 'AHU', label: 'AHU (Air Handling Units)' },
+                { value: 'GRD', label: 'GRD (Grilles/Diffusers)' },
+                { value: 'DUCTING', label: 'DUCTING (Ductwork)' },
+                { value: 'OTHER', label: 'OTHER' }
+            ];
+        }
+        
+        function populateEquipmentDropdown(selectElement, includeNoChange = false) {
+            if (!selectElement) return;
+            
+            // Clear existing options
+            selectElement.innerHTML = '';
+            
+            // Add "No Change" option if requested
+            if (includeNoChange) {
+                const noChangeOption = document.createElement('option');
+                noChangeOption.value = '';
+                noChangeOption.textContent = '-- No Change --';
+                selectElement.appendChild(noChangeOption);
+            }
+            
+            // Add equipment types from settings
+            const equipmentTypes = getEquipmentTypesFromSettings();
+            equipmentTypes.forEach(type => {
+                // Skip CUSTOM option for bulk operations
+                if (type.value === 'CUSTOM') return;
+                
+                const option = document.createElement('option');
+                option.value = type.value;
+                option.textContent = type.label || type.value;
+                selectElement.appendChild(option);
+            });
+        }
+        
+        // function applyBulkEdit() - removed
         
         function getRFQIcon(extraction) {
             return extraction.rfqRequired ? '💰' : '';
@@ -2871,8 +3543,12 @@
             
             // Update Delete All button visibility
             const deleteAllBtn = document.getElementById('delete-all-extractions');
+            const manageAllBtn = document.getElementById('manage-all');
             if (deleteAllBtn) {
                 deleteAllBtn.style.display = extractions.length > 0 ? 'inline-block' : 'none';
+            }
+            if (manageAllBtn) {
+                manageAllBtn.style.display = extractions.length > 0 ? 'inline-block' : 'none';
             }
             
             if (extractions.length === 0) {
@@ -2883,75 +3559,112 @@
             
             extractionList.innerHTML = '';
             
-            // Performance optimization: limit rendering for very large lists
-            const maxDisplayItems = 100;
-            const itemsToDisplay = extractions.slice(0, maxDisplayItems);
+            // Group extractions by equipment type
+            const grouped = {};
+            const equipmentOrder = ['FANS', 'VAV', 'RTU', 'AHU', 'GRD', 'DUCTING', 'OTHER'];
             
-            if (extractions.length > maxDisplayItems) {
-                const notice = document.createElement('div');
-                notice.style.cssText = 'padding: 10px; background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px; margin-bottom: 10px; font-size: 12px;';
-                notice.innerHTML = `⚠️ Showing first ${maxDisplayItems} of ${extractions.length} extractions for performance`;
-                extractionList.appendChild(notice);
-            }
-            
-            itemsToDisplay.forEach(extraction => {
-                const item = document.createElement('div');
-                item.className = 'extraction-item';
-                if (selectedExtractionId === extraction.id) {
-                    item.classList.add('selected');
+            extractions.forEach(extraction => {
+                const equipmentType = extraction.equipmentType || extraction.type || 'OTHER';
+                if (!grouped[equipmentType]) {
+                    grouped[equipmentType] = [];
                 }
+                grouped[equipmentType].push(extraction);
+            });
+            
+            // Add custom equipment types to order if they exist
+            Object.keys(grouped).forEach(type => {
+                if (!equipmentOrder.includes(type)) {
+                    equipmentOrder.push(type);
+                }
+            });
+            
+            // Render each group
+            equipmentOrder.forEach(equipmentType => {
+                if (!grouped[equipmentType] || grouped[equipmentType].length === 0) return;
                 
-                const extractionTypeIcon = getExtractionTypeIcon(extraction.extractionType || 'other');
-                const ocrStatusIcon = getOCRStatusIcon(extraction);
-                const rfqIcon = getRFQIcon(extraction);
-                
-                item.innerHTML = `
-                    <div class="extraction-title">
-                        ${extractionTypeIcon} ${extraction.extractionName || extraction.name}
-                        <span style="float: right;">
-                            ${rfqIcon}${rfqIcon ? ' ' : ''}${ocrStatusIcon}
-                        </span>
-                    </div>
-                    <div class="extraction-coords">
-                        Page ${extraction.coordinates?.page || 'Unknown'} • ${extraction.equipmentType || extraction.type || 'UNKNOWN'}
-                        ${extraction.description || extraction.notes ? ` • ${extraction.description || extraction.notes}` : ''}
-                    </div>
-                    <div style="margin-top: 5px;">
-                        <button class="btn" style="font-size: 12px; padding: 4px 8px; margin-right: 5px;" 
-                                onclick="event.stopPropagation(); editExtraction('${extraction.id}')">
-                            Edit
-                        </button>
-                        <button class="btn" style="font-size: 12px; padding: 4px 8px; margin-right: 5px;" 
-                                onclick="event.stopPropagation(); downloadImage('${extraction.id}')">
-                            Download
-                        </button>
-                        <button class="btn" style="font-size: 12px; padding: 4px 8px; margin-right: 5px; background: #e67e22;" 
-                                onclick="event.stopPropagation(); runOCRForExtraction('${extraction.id}')"
-                                ${extraction.ocrStatus === 'processing' ? 'disabled' : ''}>
-                            ${extraction.ocrStatus === 'processing' ? 'Processing...' : 'Run OCR'}
-                        </button>
-                        <button class="btn-secondary" style="font-size: 12px; padding: 4px 8px;" 
-                                onclick="event.stopPropagation(); deleteExtraction('${extraction.id}')">
-                            Delete
-                        </button>
-                    </div>
+                // Create group header
+                const groupHeader = document.createElement('div');
+                groupHeader.style.cssText = `
+                    font-weight: bold;
+                    margin-top: 15px;
+                    margin-bottom: 8px;
+                    padding: 5px;
+                    background: linear-gradient(to right, ${getEquipmentTypeColorCSS(equipmentType)}, transparent);
+                    border-left: 3px solid ${getEquipmentTypeBorderColor(equipmentType)};
                 `;
+                groupHeader.textContent = `${equipmentType} (${grouped[equipmentType].length})`;
+                extractionList.appendChild(groupHeader);
                 
-                item.addEventListener('click', () => {
-                    selectExtraction(extraction.id);
-                    highlightExtraction(extraction);
+                // Add items in this group
+                grouped[equipmentType].forEach(extraction => {
+                    const item = document.createElement('div');
+                    item.className = 'extraction-item';
+                    if (selectedExtractionId === extraction.id) {
+                        item.classList.add('selected');
+                    }
+                    
+                    const extractionTypeIcon = getExtractionTypeIcon(extraction.extractionType || 'other');
+                    const ocrStatusIcon = getOCRStatusIcon(extraction);
+                    const rfqIcon = getRFQIcon(extraction);
+                    
+                    // Check if OCR results are available
+                    const hasOCRResults = extraction.ocrData && extraction.ocrData.success;
+                    const ocrContent = hasOCRResults ? formatOCRResultsForDisplay(extraction) : '';
+                    
+                    item.innerHTML = `
+                        <div class="extraction-title">
+                            ${extractionTypeIcon} ${extraction.extractionName || extraction.name}
+                            <span style="float: right;">
+                                ${rfqIcon}${rfqIcon ? ' ' : ''}${ocrStatusIcon}
+                            </span>
+                        </div>
+                        <div class="extraction-coords">
+                            Page ${extraction.coordinates?.page || 'Unknown'} • ${extraction.equipmentType || extraction.type || 'UNKNOWN'}
+                            ${extraction.description || extraction.notes ? ` • ${extraction.description || extraction.notes}` : ''}
+                        </div>
+                        <div style="margin-top: 5px;">
+                            <button class="btn" style="font-size: 12px; padding: 4px 8px; margin-right: 5px;" 
+                                    onclick="event.stopPropagation(); editExtraction('${extraction.id}')">
+                                Edit
+                            </button>
+                            <button class="btn" style="font-size: 12px; padding: 4px 8px; margin-right: 5px;" 
+                                    onclick="event.stopPropagation(); downloadImage('${extraction.id}')">
+                                Download
+                            </button>
+                            <button class="btn" style="font-size: 12px; padding: 4px 8px; margin-right: 5px; background: #e67e22;" 
+                                    onclick="event.stopPropagation(); runOCRForExtraction('${extraction.id}')"
+                                    ${extraction.ocrStatus === 'processing' ? 'disabled' : ''}>
+                                ${extraction.ocrStatus === 'processing' ? 'Processing...' : 'Run OCR'}
+                            </button>
+                            ${hasOCRResults ? `
+                                <button id="ocr-toggle-${extraction.id}" class="btn" style="font-size: 12px; padding: 4px 8px; margin-right: 5px; background: #27ae60;" 
+                                        onclick="event.stopPropagation(); showOCRResultsModal('${extraction.id}')">
+                                    View Results
+                                </button>
+                            ` : ''}
+                            <button class="btn-secondary" style="font-size: 12px; padding: 4px 8px;" 
+                                    onclick="event.stopPropagation(); deleteExtraction('${extraction.id}')">
+                                Delete
+                            </button>
+                        </div>
+                    `;
+                    
+                    item.addEventListener('click', () => {
+                        selectExtraction(extraction.id);
+                        highlightExtraction(extraction);
+                    });
+                    
+                    // Add hover highlighting
+                    item.addEventListener('mouseenter', () => {
+                        highlightExtractionOnHover(extraction.id);
+                    });
+                    
+                    item.addEventListener('mouseleave', () => {
+                        removeHoverHighlight(extraction.id);
+                    });
+                    
+                    extractionList.appendChild(item);
                 });
-                
-                // Add hover highlighting
-                item.addEventListener('mouseenter', () => {
-                    highlightExtractionOnHover(extraction.id);
-                });
-                
-                item.addEventListener('mouseleave', () => {
-                    removeHoverHighlight(extraction.id);
-                });
-                
-                extractionList.appendChild(item);
             });
             
             console.timeEnd('Update Extraction List DOM');
@@ -3018,7 +3731,39 @@
             }
         }
 
-        function downloadImage(extractionId) {
+        async function ensureImageExtracted(extraction) {
+            // If image data already exists, return it
+            if (extraction.imageData && extraction.imageData !== null) {
+                return extraction.imageData;
+            }
+            
+            // If no coordinates, can't extract image
+            if (!extraction.coordinates) {
+                console.error('No coordinates for extraction:', extraction.id);
+                return null;
+            }
+            
+            try {
+                setStatus(`Extracting image for ${extraction.extractionName}...`);
+                const imageData = await extractImageFromSelection(extraction.coordinates);
+                
+                // Update the extraction with the image data
+                extraction.imageData = imageData;
+                // Remove the flag since we've now extracted
+                delete extraction.needsImageExtraction;
+                
+                // Save to localStorage to persist the extracted image
+                saveToLocalStorage();
+                
+                return imageData;
+            } catch (error) {
+                console.error('Failed to extract image:', error);
+                setStatus('Failed to extract image');
+                return null;
+            }
+        }
+
+        async function downloadImage(extractionId) {
             // Find extraction by ID
             const extraction = extractions.find(e => e.id === extractionId);
             if (!extraction) {
@@ -3026,12 +3771,20 @@
                 return;
             }
             
+            // Ensure image is extracted
+            const imageData = await ensureImageExtracted(extraction);
+            if (!imageData) {
+                alert('Could not extract image for download');
+                return;
+            }
+            
             const link = document.createElement('a');
             const name = extraction.extractionName || extraction.name;
             const equipmentType = extraction.equipmentType || extraction.type || 'UNKNOWN';
             link.download = `${equipmentType}_${name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_page${extraction.coordinates?.page || 'unknown'}.png`;
-            link.href = extraction.imageData;
+            link.href = imageData;
             link.click();
+            setStatus(`Downloaded ${extraction.extractionName}`);
         }
 
         function selectExtraction(extractionId) {
@@ -3040,6 +3793,7 @@
             // Refresh display to update selection highlighting
             restoreSelectionsForPage(currentPage);
         }
+        
 
         function editExtraction(extractionId) {
             // Find the extraction to edit
@@ -3099,10 +3853,8 @@
             currentOCRResult = null;
             
             // Clear OCR UI elements completely - use innerHTML to clear all HTML content
-            document.getElementById('markdown-output').innerHTML = '';
             document.getElementById('table-ocr-status').innerHTML = '';
             document.getElementById('table-ocr-status').style.display = 'none';
-            document.getElementById('markdown-output').style.display = 'none';
             document.getElementById('ocr-config-group').style.display = 'none';
             document.getElementById('enable-table-ocr').checked = false;
             
@@ -3155,10 +3907,7 @@
                         markdownText = extraction.ocrData.text;
                     }
                     
-                    if (markdownText) {
-                        document.getElementById('markdown-output').textContent = markdownText;
-                        document.getElementById('markdown-output').style.display = 'block';
-                    }
+                    // Markdown text is now shown in the OCR results modal instead
                 }
             }
             
@@ -3192,6 +3941,12 @@
                     throw new Error('OCR functionality not available');
                 }
                 
+                // Ensure image is extracted before running OCR
+                const imageData = await ensureImageExtracted(extraction);
+                if (!imageData) {
+                    throw new Error('Could not extract image for OCR');
+                }
+                
                 // Get OCR options - use saved API key if available
                 const savedApiKey = localStorage.getItem('gemini-api-key');
                 const ocrOptions = {
@@ -3200,13 +3955,22 @@
                 };
                 
                 // Run OCR on the extraction's image
-                const result = await window.OCRTableExtractor.extractTable(extraction.imageData, ocrOptions);
+                const result = await window.OCRTableExtractor.extractTable(imageData, ocrOptions);
                 
                 if (result.success) {
                     // Update extraction with OCR results
                     extraction.ocrData = result;
                     extraction.ocrStatus = 'completed';
-                    setStatus(`OCR completed for ${extraction.extractionName}`);
+                    
+                    // Check if notes were found
+                    const notes = result.notes || result.tableData?.notes;
+                    const notesCount = notes?.count || 0;
+                    
+                    if (notesCount > 0) {
+                        setStatus(`✅ OCR completed for ${extraction.extractionName} - Found ${notesCount} installation notes`);
+                    } else {
+                        setStatus(`✅ OCR completed for ${extraction.extractionName}`);
+                    }
                 } else {
                     extraction.ocrStatus = 'failed';
                     setStatus(`OCR failed: ${result.error || 'Unknown error'}`);
@@ -3221,10 +3985,30 @@
             // Update the UI and save
             updateExtractionList();
             saveToLocalStorage();
+            
+            // OCR completed - results can now be viewed in modal via "View Results" button
         }
 
         function deleteExtraction(extractionId) {
             if (confirm('Are you sure you want to delete this schedule?')) {
+                // Find the extraction to get its spaceXref if it exists
+                const extractionToDelete = extractions.find(e => e.id === extractionId);
+                
+                // If this extraction was from a BlueBeam space, remove it from imported spaces
+                if (extractionToDelete && extractionToDelete.spaceXref && spaceManager && spaceManager.importedSpaces) {
+                    spaceManager.importedSpaces.delete(extractionToDelete.spaceXref);
+                    
+                    // Re-render spaces to update checkmarks
+                    const currentPageSpaces = spaceManager.getSpacesForPage(currentPage - 1);
+                    if (currentPageSpaces && currentPageSpaces.length > 0) {
+                        const pageInfo = spaceManager.pageInfo[currentPage - 1];
+                        const pageHeight = pageInfo?.height || 792;
+                        const pageWidth = pageInfo?.width || 612;
+                        const rotation = pageInfo?.rotation || 0;
+                        spaceManager.renderSpacesForPage(currentPage - 1, currentZoom, pageHeight, pageWidth, rotation);
+                    }
+                }
+                
                 extractions = extractions.filter(e => e.id !== extractionId);
                 if (selectedExtractionId === extractionId) {
                     selectedExtractionId = null;
@@ -3248,11 +4032,6 @@
             }
         }
 
-        function showDeleteContextMenu(event, extractionId) {
-            // Simple confirmation for now - could be enhanced with custom context menu
-            deleteExtraction(extractionId);
-        }
-        
         function deleteAllExtractions() {
             const totalExtractions = extractions.length;
             
@@ -3264,6 +4043,26 @@
             const message = `Are you sure you want to delete ALL ${totalExtractions} extraction${totalExtractions !== 1 ? 's' : ''}?\n\nThis action cannot be undone.`;
             
             if (confirm(message)) {
+                // If using BlueBeam spaces, clear all imported spaces
+                if (spaceManager && spaceManager.importedSpaces) {
+                    // Find all extractions with spaceXref and remove from imported
+                    extractions.forEach(extraction => {
+                        if (extraction.spaceXref) {
+                            spaceManager.importedSpaces.delete(extraction.spaceXref);
+                        }
+                    });
+                    
+                    // Re-render spaces to update checkmarks
+                    const currentPageSpaces = spaceManager.getSpacesForPage(currentPage - 1);
+                    if (currentPageSpaces && currentPageSpaces.length > 0) {
+                        const pageInfo = spaceManager.pageInfo[currentPage - 1];
+                        const pageHeight = pageInfo?.height || 792;
+                        const pageWidth = pageInfo?.width || 612;
+                        const rotation = pageInfo?.rotation || 0;
+                        spaceManager.renderSpacesForPage(currentPage - 1, currentZoom, pageHeight, pageWidth, rotation);
+                    }
+                }
+                
                 // Clear all extractions
                 extractions = [];
                 selectedExtractionId = null;
@@ -3310,12 +4109,6 @@
                     selectExtraction(extraction.id);
                 });
                 
-                // Add right-click handler for deletion
-                selectionRect.addEventListener('contextmenu', function(e) {
-                    e.preventDefault();
-                    showDeleteContextMenu(e, extraction.id);
-                });
-                
                 // Update selection state
                 if (selectedExtractionId === extraction.id) {
                     selectionRect.classList.add('selected');
@@ -3347,8 +4140,8 @@
             setStatus('Extracting all images...');
             
             extractions.forEach((extraction, index) => {
-                setTimeout(() => {
-                    downloadImage(extraction);
+                setTimeout(async () => {
+                    await downloadImage(extraction.id);
                     if (index === extractions.length - 1) {
                         setStatus(`All ${extractions.length} images extracted successfully`);
                     }
@@ -3358,6 +4151,26 @@
 
         function clearAllSelections() {
             if (confirm('Are you sure you want to clear all extracted schedules?')) {
+                // If using BlueBeam spaces, clear all imported spaces
+                if (spaceManager && spaceManager.importedSpaces) {
+                    // Clear all imported space references
+                    extractions.forEach(extraction => {
+                        if (extraction.spaceXref) {
+                            spaceManager.importedSpaces.delete(extraction.spaceXref);
+                        }
+                    });
+                    
+                    // Re-render spaces to remove checkmarks
+                    const currentPageSpaces = spaceManager.getSpacesForPage(currentPage - 1);
+                    if (currentPageSpaces && currentPageSpaces.length > 0) {
+                        const pageInfo = spaceManager.pageInfo[currentPage - 1];
+                        const pageHeight = pageInfo?.height || 792;
+                        const pageWidth = pageInfo?.width || 612;
+                        const rotation = pageInfo?.rotation || 0;
+                        spaceManager.renderSpacesForPage(currentPage - 1, currentZoom, pageHeight, pageWidth, rotation);
+                    }
+                }
+                
                 extractions = [];
                 extractionCounter = 0;
                 selectedExtractionId = null;
@@ -3399,6 +4212,22 @@
                 'UNKNOWN': { r: 0.58, g: 0.65, b: 0.65 }   // Gray
             };
             return colors[equipmentType] || colors['OTHER'];
+        }
+        
+        function getEquipmentTypeColorCSS(equipmentType) {
+            const color = getEquipmentTypeColor(equipmentType);
+            const r = Math.round(color.r * 255);
+            const g = Math.round(color.g * 255);
+            const b = Math.round(color.b * 255);
+            return `rgba(${r}, ${g}, ${b}, 0.1)`;
+        }
+        
+        function getEquipmentTypeBorderColor(equipmentType) {
+            const color = getEquipmentTypeColor(equipmentType);
+            const r = Math.round(color.r * 255);
+            const g = Math.round(color.g * 255);
+            const b = Math.round(color.b * 255);
+            return `rgb(${r}, ${g}, ${b})`;
         }
 
         // Create annotated PDF with extraction rectangles
@@ -3677,8 +4506,16 @@
                 return;
             }
             
-            // Show progress indicator
-            setStatus('Preparing export files...');
+            // Show progress modal
+            const progressModal = document.getElementById('progress-modal');
+            const progressTitle = document.getElementById('progress-title');
+            const progressFill = document.getElementById('progress-fill');
+            const progressText = document.getElementById('progress-text');
+            
+            progressModal.style.display = 'flex';
+            progressTitle.textContent = 'Exporting Extractions to ZIP';
+            progressFill.style.width = '0%';
+            progressText.textContent = `Preparing ${extractions.length} extractions for export...`;
             
             try {
                 // Create ZIP file
@@ -3703,13 +4540,18 @@
                     equipment: {}
                 };
                 
+                // Track progress
+                let processedCount = 0;
+                const totalCount = extractions.length;
+                
                 // Process each equipment type
                 for (const [equipmentType, groupExtractions] of Object.entries(equipmentGroups)) {
-                    setStatus(`Processing ${equipmentType} extractions...`);
+                    progressText.textContent = `Processing ${equipmentType} equipment (${groupExtractions.length} items)...`;
                     
                     mainData.equipment[equipmentType] = [];
                     
-                    for (const extraction of groupExtractions) {
+                    for (let i = 0; i < groupExtractions.length; i++) {
+                        const extraction = groupExtractions[i];
                         const safeName = extraction.extractionName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
                         const pageNum = extraction.coordinates?.page || 'unknown';
                         const baseFileName = `${safeName}_page${pageNum}`;
@@ -3732,9 +4574,25 @@
                         
                         mainData.equipment[equipmentType].push(extractionData);
                         
-                        // Add PNG image file to ZIP
-                        if (extraction.imageData) {
-                            const imageBlob = await dataURLToBlob(extraction.imageData);
+                        // Update progress for current extraction
+                        processedCount++;
+                        const progress = (processedCount / totalCount) * 100;
+                        progressFill.style.width = `${progress}%`;
+                        progressFill.textContent = `${Math.round(progress)}%`;
+                        progressText.textContent = `Processing "${extraction.extractionName}" (${processedCount} of ${totalCount})...`;
+                        
+                        // Small delay to allow UI to update
+                        await new Promise(resolve => setTimeout(resolve, 10));
+                        
+                        // Check if image needs extraction (for imported spaces without images)
+                        if (!extraction.imageData && extraction.needsImageExtraction) {
+                            progressText.textContent = `Extracting image for "${extraction.extractionName}"...`;
+                        }
+                        
+                        // Ensure image is extracted and add PNG file to ZIP
+                        const imageData = await ensureImageExtracted(extraction);
+                        if (imageData) {
+                            const imageBlob = await dataURLToBlob(imageData);
                             zip.file(`${equipmentType}/${baseFileName}.png`, imageBlob);
                         }
                         
@@ -3757,10 +4615,14 @@
                 const readmeContent = createReadmeFile(mainData);
                 zip.file('README.txt', readmeContent);
                 
+                // Add session file for easy re-import
+                const sessionData = createSessionData();
+                zip.file('session.pdfextractor.json', JSON.stringify(sessionData, null, 2));
+                
                 // Create annotated PDF if original PDF is available
                 if (currentPDFData && typeof PDFLib !== 'undefined') {
                     try {
-                        setStatus('Creating annotated PDF...');
+                        progressText.textContent = 'Creating annotated PDF with extraction highlights...';
                         
                         // Create annotated PDF with all extractions
                         const annotatedPdfBytes = await createAnnotatedPDF(currentPDFData, extractions);
@@ -3768,16 +4630,19 @@
                         // Add annotated PDF to ZIP
                         zip.file('annotated_construction_schedules.pdf', annotatedPdfBytes);
                         
-                        setStatus('Annotated PDF created successfully...');
+                        progressText.textContent = 'Annotated PDF created successfully...';
                         
                     } catch (error) {
                         console.error('Error creating annotated PDF:', error);
-                        setStatus('Warning: Could not create annotated PDF, continuing with regular export...');
+                        progressText.textContent = 'Could not create annotated PDF, continuing...';
                         // Continue with export even if annotated PDF fails
+                        await new Promise(resolve => setTimeout(resolve, 500));
                     }
                 }
                 
-                setStatus('Generating ZIP file...');
+                progressText.textContent = 'Compressing and generating ZIP file...';
+                progressFill.style.width = '95%';
+                progressFill.textContent = '95%';
                 
                 // Generate ZIP and download
                 const zipBlob = await zip.generateAsync({ 
@@ -3786,20 +4651,52 @@
                     compressionOptions: { level: 6 }
                 });
                 
+                // Create properly typed blob for better security handling
+                const typedBlob = new Blob([zipBlob], { type: 'application/zip' });
+                
+                // Final progress update
+                progressFill.style.width = '100%';
+                progressFill.textContent = '100%';
+                progressText.textContent = 'Export complete! Starting download...';
+                
+                // Small delay to show completion
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Hide progress modal
+                progressModal.style.display = 'none';
+                
+                // Create download link with proper cleanup
+                const url = URL.createObjectURL(typedBlob);
                 const link = document.createElement('a');
                 link.download = `construction_extractions_${new Date().toISOString().slice(0, 10)}.zip`;
-                link.href = URL.createObjectURL(zipBlob);
+                link.href = url;
+                
+                // Add link to DOM temporarily (helps with some browsers)
+                document.body.appendChild(link);
+                
+                // Small delay before clicking to ensure proper registration
+                await new Promise(resolve => setTimeout(resolve, 50));
                 link.click();
+                
+                // Clean up
+                document.body.removeChild(link);
+                setTimeout(() => URL.revokeObjectURL(url), 100);
                 
                 setStatus(`✓ Exported ${extractions.length} extractions as organized ZIP file`);
                 
             } catch (error) {
                 console.error('Export error:', error);
+                // Hide progress modal on error
+                progressModal.style.display = 'none';
                 setStatus('✗ Export failed. Please try again.');
             }
         }
 
         function saveToLocalStorage() {
+            // Redirect to new session save function
+            saveSessionToLocalStorage();
+            
+            // Keep old localStorage save for backward compatibility (will be phased out)
             try {
                 const data = {
                     extractions: extractions,
@@ -3840,11 +4737,340 @@
             statusText.textContent = message;
         }
 
-        // Load saved data asynchronously after page load to prevent blocking
-        setTimeout(() => {
-            console.log('Loading saved data asynchronously...');
-            loadFromLocalStorage();
-        }, 100);
+        // ============================================================
+        // SESSION MANAGEMENT FUNCTIONS
+        // ============================================================
+        
+        // Create session data object
+        function createSessionData() {
+            const sessionData = {
+                version: "1.0",
+                pdfFileName: currentPDFFile ? currentPDFFile.name : 'unknown.pdf',
+                pdfFileSize: currentPDFFile ? currentPDFFile.size : 0,
+                lastModified: new Date().toISOString(),
+                extractionCounter: extractionCounter,
+                extractions: extractions.map(e => {
+                    // Clone extraction but exclude imageData to save space
+                    const { imageData, ...extractionWithoutImage } = e;
+                    return extractionWithoutImage;
+                }),
+                blueBeamSpaces: {
+                    importedSpaces: spaceManager?.importedSpaces ? 
+                        Array.from(spaceManager.importedSpaces) : []
+                }
+            };
+            return sessionData;
+        }
+        
+        // Save session to localStorage
+        function saveSessionToLocalStorage() {
+            if (!currentPDFFile) {
+                console.log('No PDF file loaded, skipping session save');
+                return;
+            }
+            
+            try {
+                const sessionData = createSessionData();
+                const sessionKey = `pdfExtractor_session_${currentPDFFile.name}`;
+                
+                // Check storage size before saving
+                const sessionString = JSON.stringify(sessionData);
+                const sizeKB = Math.round(sessionString.length / 1024);
+                
+                if (sizeKB > 2048) { // Warn if over 2MB
+                    console.warn(`Large session size: ${sizeKB}KB`);
+                }
+                
+                localStorage.setItem(sessionKey, sessionString);
+                updateRecentSessions(currentPDFFile.name);
+                
+                // Update session status in UI
+                updateSessionStatus(`Session saved (${extractions.length} extractions)`);
+                console.log(`Session saved for ${currentPDFFile.name}: ${sizeKB}KB`);
+            } catch (error) {
+                console.error('Error saving session:', error);
+                if (error.name === 'QuotaExceededError') {
+                    alert('Session storage full. Consider exporting your session or clearing old sessions.');
+                }
+            }
+        }
+        
+        // Load session from localStorage
+        function loadSessionFromLocalStorage(fileName) {
+            const sessionKey = `pdfExtractor_session_${fileName}`;
+            try {
+                const sessionData = localStorage.getItem(sessionKey);
+                if (sessionData) {
+                    const session = JSON.parse(sessionData);
+                    console.log(`Session found for ${fileName}: ${session.extractions.length} extractions`);
+                    return session;
+                }
+            } catch (error) {
+                console.error('Error loading session:', error);
+            }
+            return null;
+        }
+        
+        // Check if session exists
+        function hasExistingSession(fileName) {
+            const sessionKey = `pdfExtractor_session_${fileName}`;
+            return localStorage.getItem(sessionKey) !== null;
+        }
+        
+        // Clear session for specific file
+        function clearSession(fileName) {
+            const sessionKey = `pdfExtractor_session_${fileName}`;
+            localStorage.removeItem(sessionKey);
+            console.log(`Session cleared for ${fileName}`);
+        }
+        
+        // Clear current session
+        function clearCurrentSession() {
+            if (!currentPDFFile) {
+                alert('No PDF loaded');
+                return;
+            }
+            
+            if (confirm(`Clear session for ${currentPDFFile.name}? This will remove all extractions for this PDF.`)) {
+                clearSession(currentPDFFile.name);
+                resetExtractions();
+                updateSessionStatus('Session cleared');
+                setStatus('Session cleared - starting fresh');
+            }
+        }
+        
+        // Restore session data to application state
+        function restoreSession(sessionData) {
+            try {
+                // Clear current data
+                extractions = [];
+                extractionCounter = sessionData.extractionCounter || 0;
+                
+                // Restore extractions
+                sessionData.extractions.forEach(extraction => {
+                    // Mark that images need regeneration
+                    extraction.needsImageExtraction = true;
+                    extractions.push(extraction);
+                });
+                
+                // Restore BlueBeam imported spaces
+                if (sessionData.blueBeamSpaces?.importedSpaces && spaceManager) {
+                    spaceManager.importedSpaces = new Set(sessionData.blueBeamSpaces.importedSpaces);
+                    // Re-render spaces with checkmarks
+                    if (currentPage && spaceManager.pageInfo) {
+                        const pageInfo = spaceManager.pageInfo[currentPage - 1];
+                        if (pageInfo) {
+                            spaceManager.renderSpacesForPage(
+                                currentPage - 1, 
+                                currentZoom, 
+                                pageInfo.height || 792, 
+                                pageInfo.width || 612, 
+                                pageInfo.rotation || 0
+                            );
+                        }
+                    }
+                }
+                
+                // Update UI
+                updateExtractionList();
+                if (currentPage) {
+                    restoreSelectionsForPage(currentPage);
+                }
+                
+                // Update buttons
+                document.getElementById('export-data').disabled = extractions.length === 0;
+                document.getElementById('extract-all').disabled = extractions.length === 0;
+                document.getElementById('delete-all-extractions').style.display = 
+                    extractions.length > 0 ? 'inline-block' : 'none';
+                document.getElementById('manage-all').style.display = 
+                    extractions.length > 0 ? 'inline-block' : 'none';
+                
+                console.log(`Session restored: ${extractions.length} extractions`);
+            } catch (error) {
+                console.error('Error restoring session:', error);
+                alert('Failed to restore session. Starting fresh.');
+                resetExtractions();
+            }
+        }
+        
+        // Reset extractions (clear all)
+        function resetExtractions() {
+            extractions = [];
+            extractionCounter = 0;
+            selectedExtractionId = null;
+            updateExtractionList();
+            clearSavedOverlay();
+            clearTempOverlay();
+            
+            // Clear BlueBeam imported spaces tracking
+            if (spaceManager && spaceManager.importedSpaces) {
+                spaceManager.importedSpaces.clear();
+            }
+            
+            // Update button states
+            document.getElementById('export-data').disabled = true;
+            document.getElementById('extract-all').disabled = true;
+            document.getElementById('delete-all-extractions').style.display = 'none';
+            document.getElementById('manage-all').style.display = 'none';
+        }
+        
+        // Update recent sessions list
+        function updateRecentSessions(fileName) {
+            try {
+                let recent = JSON.parse(localStorage.getItem('pdfExtractor_recentSessions') || '[]');
+                recent = recent.filter(f => f !== fileName);
+                recent.unshift(fileName);
+                recent = recent.slice(0, 10); // Keep last 10
+                localStorage.setItem('pdfExtractor_recentSessions', JSON.stringify(recent));
+            } catch (error) {
+                console.error('Error updating recent sessions:', error);
+            }
+        }
+        
+        // Export session to file
+        function exportSession() {
+            if (!currentPDFFile) {
+                alert('No PDF loaded');
+                return;
+            }
+            
+            try {
+                const sessionData = createSessionData();
+                const blob = new Blob([JSON.stringify(sessionData, null, 2)], 
+                    { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${currentPDFFile.name}.pdfextractor.session.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                
+                setStatus('Session exported successfully');
+            } catch (error) {
+                console.error('Error exporting session:', error);
+                alert('Failed to export session');
+            }
+        }
+        
+        // Import session from file
+        async function importSession(file) {
+            if (!file) return;
+            
+            try {
+                const text = await file.text();
+                const sessionData = JSON.parse(text);
+                
+                // Validate session data
+                if (!sessionData.version || !sessionData.extractions) {
+                    throw new Error('Invalid session file format');
+                }
+                
+                // Warn if different PDF
+                if (currentPDFFile && sessionData.pdfFileName !== currentPDFFile.name) {
+                    if (!confirm(`This session is for "${sessionData.pdfFileName}" but current PDF is "${currentPDFFile.name}". Import anyway?`)) {
+                        return;
+                    }
+                }
+                
+                // Restore the session
+                restoreSession(sessionData);
+                setStatus(`Session imported: ${sessionData.extractions.length} extractions loaded`);
+                updateSessionStatus(`Session imported (${sessionData.extractions.length} extractions)`);
+                
+                // Save to localStorage for current file
+                if (currentPDFFile) {
+                    const sessionKey = `pdfExtractor_session_${currentPDFFile.name}`;
+                    localStorage.setItem(sessionKey, JSON.stringify(sessionData));
+                }
+            } catch (error) {
+                console.error('Error importing session:', error);
+                alert('Failed to import session: ' + error.message);
+            }
+        }
+        
+        // Get time since last modified
+        function getTimeSinceLastModified(isoDate) {
+            const date = new Date(isoDate);
+            const now = new Date();
+            const diff = now - date;
+            
+            const minutes = Math.floor(diff / 60000);
+            const hours = Math.floor(diff / 3600000);
+            const days = Math.floor(diff / 86400000);
+            
+            if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
+            if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+            if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+            return 'just now';
+        }
+        
+        // Update session status in UI
+        function updateSessionStatus(message) {
+            const statusElement = document.getElementById('session-info');
+            if (statusElement) {
+                statusElement.textContent = message;
+            }
+        }
+        
+        // Get storage info
+        function getStorageInfo() {
+            let totalSize = 0;
+            let sessionCount = 0;
+            
+            for (let key in localStorage) {
+                if (key.startsWith('pdfExtractor_session_')) {
+                    totalSize += localStorage.getItem(key).length;
+                    sessionCount++;
+                }
+            }
+            
+            return {
+                usedKB: Math.round(totalSize / 1024),
+                sessionCount: sessionCount,
+                estimatedMaxKB: 5120 // ~5MB typical limit
+            };
+        }
+        
+        // Clean up old sessions (optional)
+        function cleanupOldSessions(daysToKeep = 30) {
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - daysToKeep);
+            let cleaned = 0;
+            
+            for (let key in localStorage) {
+                if (key.startsWith('pdfExtractor_session_')) {
+                    try {
+                        const session = JSON.parse(localStorage.getItem(key));
+                        if (new Date(session.lastModified) < cutoffDate) {
+                            localStorage.removeItem(key);
+                            cleaned++;
+                        }
+                    } catch (e) {
+                        // Invalid session data, remove it
+                        localStorage.removeItem(key);
+                        cleaned++;
+                    }
+                }
+            }
+            
+            if (cleaned > 0) {
+                console.log(`Cleaned up ${cleaned} old sessions`);
+            }
+            return cleaned;
+        }
+
+        // ============================================================
+        // END SESSION MANAGEMENT FUNCTIONS
+        // ============================================================
+
+        // Don't auto-load old localStorage data when we have session management
+        // Sessions are now loaded when PDFs are selected
+        // setTimeout(() => {
+        //     console.log('Loading saved data asynchronously...');
+        //     loadFromLocalStorage();
+        // }, 100);
 
         // Test function for debugging PDF-LIB integration
         window.testPDFLib = function() {

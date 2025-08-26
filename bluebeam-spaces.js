@@ -43,7 +43,7 @@ class BlueBeamSpaceManager {
                 width: 100%;
                 height: 100%;
                 pointer-events: none;
-                z-index: 100;
+                z-index: 5;
             `;
             
             // Add to canvas container
@@ -267,7 +267,7 @@ class BlueBeamSpaceManager {
             border: 2px ${isImported ? 'dashed' : 'solid'} rgba(${r}, ${g}, ${b}, ${space.opacity});
             pointer-events: auto;
             cursor: pointer;
-            z-index: 99;
+            z-index: 4;
         `;
         
         // Add checkmark icon if imported
