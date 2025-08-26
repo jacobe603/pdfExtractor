@@ -5157,18 +5157,63 @@
             const path = event.target.value;
             if (!path || path === '') return;
             
-            currentPDFPath = path;
-            setStatus(`Path set from recent files: ${path.split('/').pop()}`);
-            
             // Reset dropdown
             event.target.value = '';
             
-            // If we have the file loaded, update its path
-            if (currentPDFFile) {
-                const key = `${currentPDFFile.name}_${currentPDFFile.size}`;
-                if (recentFiles[key]) {
-                    recentFiles[key].lastUsed = Date.now();
+            // Load the PDF file through server
+            try {
+                const fileName = path.split(/[/\\]/).pop();
+                setStatus(`Loading ${fileName} from recent files...`);
+                
+                const response = await fetch('http://localhost:5000/api/load-pdf', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: path })
+                });
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const file = new File([blob], fileName, { type: 'application/pdf' });
+                    
+                    // Set the path before loading
+                    currentPDFPath = path;
+                    
+                    // Create a data transfer to simulate file input
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(file);
+                    pdfInput.files = dataTransfer.files;
+                    
+                    // Trigger file select handler
+                    const event = new Event('change', { bubbles: true });
+                    pdfInput.dispatchEvent(event);
+                    
+                    // Update recent files last used time
+                    const key = `${fileName}_${blob.size}`;
+                    if (recentFiles[key]) {
+                        recentFiles[key].lastUsed = Date.now();
+                        saveRecentFiles();
+                    }
+                    
+                    setStatus(`Loaded: ${fileName} from recent files`);
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to load PDF');
+                }
+            } catch (error) {
+                console.error('Error loading recent file:', error);
+                alert('Could not load the selected file: ' + error.message);
+                // Remove from recent files if it no longer exists
+                const fileName = path.split(/[/\\]/).pop();
+                const keysToRemove = [];
+                Object.entries(recentFiles).forEach(([key, file]) => {
+                    if (file.path === path) {
+                        keysToRemove.push(key);
+                    }
+                });
+                keysToRemove.forEach(key => delete recentFiles[key]);
+                if (keysToRemove.length > 0) {
                     saveRecentFiles();
+                    updateRecentFilesDropdown();
                 }
             }
         }
