@@ -5296,6 +5296,7 @@
                     const base64data = reader.result.split(',')[1];
                     
                     try {
+                        console.log('Exporting to PDF folder with path:', currentPDFPath);
                         const response = await fetch('http://localhost:5000/api/export/local', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -5307,13 +5308,16 @@
                         
                         if (response.ok) {
                             const result = await response.json();
+                            console.log('Export successful:', result);
                             setStatus(`✅ Exported to: ${result.filename}`);
-                            alert(`Export saved to PDF directory:\n${result.filename}`);
+                            alert(`Export saved successfully!\n\nFile: ${result.filename}\n\nFull path: ${result.path}`);
                         } else {
-                            throw new Error('Export failed');
+                            const errorData = await response.json();
+                            throw new Error(errorData.error || 'Export failed');
                         }
                     } catch (error) {
                         console.error('Export to local failed:', error);
+                        alert(`Export to PDF folder failed: ${error.message}\n\nThe file will be downloaded instead.`);
                         // Fall back to download
                         const url = URL.createObjectURL(zipBlob);
                         const a = document.createElement('a');
