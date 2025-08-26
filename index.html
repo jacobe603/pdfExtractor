@@ -5196,8 +5196,30 @@
         
         // Export to local directory (next to PDF)
         async function exportToLocalDirectory() {
-            if (!serverAvailable || !currentPDFPath) {
-                alert('Export to PDF folder requires the server to be running and a known PDF path.\n\nUse regular Export instead.');
+            if (!serverAvailable) {
+                alert('Export to PDF folder requires the server to be running.\n\nPlease start the server using start_all.py');
+                return;
+            }
+            
+            // If we don't have a path, prompt for it
+            if (!currentPDFPath && currentPDFFile) {
+                const suggestedPath = prompt(
+                    'Enter the full path to your PDF file:\n\n' +
+                    'For example:\n' +
+                    'C:\\Users\\YourName\\Documents\\' + currentPDFFile.name + '\n\n' +
+                    'The export will be saved in the same folder as your PDF.',
+                    'C:\\Users\\' + currentPDFFile.name
+                );
+                
+                if (!suggestedPath) {
+                    return; // User cancelled
+                }
+                
+                currentPDFPath = suggestedPath;
+            }
+            
+            if (!currentPDFPath) {
+                alert('No PDF path available. Please load a PDF first.');
                 return;
             }
             
