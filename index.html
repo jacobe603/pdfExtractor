@@ -3747,7 +3747,7 @@
             }
         }
 
-        async function ensureImageExtracted(extraction) {
+        async function ensureImageExtracted(extraction, skipSave = false) {
             // If image data already exists, return it
             if (extraction.imageData && extraction.imageData !== null) {
                 return extraction.imageData;
@@ -3768,8 +3768,10 @@
                 // Remove the flag since we've now extracted
                 delete extraction.needsImageExtraction;
                 
-                // Save to localStorage to persist the extracted image
-                saveToLocalStorage();
+                // Only save if not skipping (e.g., during export)
+                if (!skipSave) {
+                    saveToLocalStorage();
+                }
                 
                 return imageData;
             } catch (error) {
@@ -4605,8 +4607,8 @@
                             progressText.textContent = `Extracting image for "${extraction.extractionName}"...`;
                         }
                         
-                        // Ensure image is extracted and add PNG file to ZIP
-                        const imageData = await ensureImageExtracted(extraction);
+                        // Ensure image is extracted and add PNG file to ZIP (skip save during export)
+                        const imageData = await ensureImageExtracted(extraction, true);
                         if (imageData) {
                             const imageBlob = await dataURLToBlob(imageData);
                             zip.file(`${equipmentType}/${baseFileName}.png`, imageBlob);
@@ -5155,12 +5157,8 @@
                 updateSessionStatus(`Session saved (${extractions.length} extractions)`);
                 console.log(`Session saved to localStorage for ${currentPDFFile.name}: ${sizeKB}KB`);
                 
-                // Also save legacy format for backward compatibility
-                const legacyData = {
-                    extractions: extractions,
-                    counter: extractionCounter
-                };
-                localStorage.setItem('pdfExtractorData', JSON.stringify(legacyData));
+                // DO NOT save legacy format with full images - it exceeds quota
+                // The session format already excludes images (line 4759)
                 
             } catch (error) {
                 console.error('Error saving session:', error);
@@ -5237,8 +5235,8 @@
                         const pageNum = extraction.coordinates?.page || 1;
                         const baseFileName = `${safeName}_page${pageNum}`;
                         
-                        // Ensure image is extracted and add to ZIP
-                        const imageData = await ensureImageExtracted(extraction);
+                        // Ensure image is extracted and add to ZIP (skip save during export)
+                        const imageData = await ensureImageExtracted(extraction, true);
                         if (imageData) {
                             const imageBlob = await dataURLToBlob(imageData);
                             folder.file(`${baseFileName}.png`, imageBlob);
