@@ -864,6 +864,12 @@
         let serverAvailable = false;
         let equipmentTypes = [];
 
+        // Dynamic server URL detection (same as main application)
+        function getServerUrl() {
+            return `http://${window.location.hostname}:5000`;
+        }
+        const SERVER_URL = getServerUrl();
+
         // Initialize the application
         document.addEventListener('DOMContentLoaded', async function() {
             console.log('Equipment Browser initialized');
@@ -933,7 +939,7 @@
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), 3000);
                 
-                const response = await fetch('http://127.0.0.1:5000/api/health', { 
+                const response = await fetch(`${SERVER_URL}/api/health`, { 
                     method: 'GET',
                     mode: 'cors',
                     signal: controller.signal
@@ -1090,7 +1096,7 @@
             } else if (extraction.files && extraction.files.image && serverAvailable) {
                 // Image file path - serve through Flask
                 const encodedPath = encodeURIComponent(extraction.files.image);
-                const imageUrl = `http://127.0.0.1:5000/api/extraction-file/${encodedPath}`;
+                const imageUrl = `${SERVER_URL}/api/extraction-file/${encodedPath}`;
                 thumbnailHtml = `<img src="${imageUrl}" alt="Extraction thumbnail" onerror="this.parentElement.innerHTML='<div class=\\'placeholder\\'>Image not available</div>'">`;
             } else {
                 // No image available
@@ -1340,7 +1346,7 @@
             updateStatus('Loading from folder path...');
             
             try {
-                const response = await fetch('http://127.0.0.1:5000/api/browse-extractions', {
+                const response = await fetch(`${SERVER_URL}/api/browse-extractions`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'
@@ -1376,7 +1382,7 @@
             
             try {
                 // Use the server's browse-extractions endpoint to find folders with this name
-                const response = await fetch('http://127.0.0.1:5000/api/browse-extractions', {
+                const response = await fetch(`${SERVER_URL}/api/browse-extractions`, {
                     method: 'GET'
                 });
                 
@@ -1409,7 +1415,7 @@
                 let foundPath = null;
                 for (const testPath of commonPaths) {
                     try {
-                        const testResponse = await fetch('http://127.0.0.1:5000/api/browse-extractions', {
+                        const testResponse = await fetch(`${SERVER_URL}/api/browse-extractions`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ folder_path: testPath })
@@ -1617,7 +1623,7 @@
             } else if (extraction.files && extraction.files.image && serverAvailable) {
                 // Image file path - serve through Flask
                 const encodedPath = encodeURIComponent(extraction.files.image);
-                const imageUrl = `http://127.0.0.1:5000/api/extraction-file/${encodedPath}`;
+                const imageUrl = `${SERVER_URL}/api/extraction-file/${encodedPath}`;
                 imageEl.src = imageUrl;
                 imageEl.style.display = 'block';
                 imageEl.onerror = function() {
@@ -1785,7 +1791,7 @@
             if (serverAvailable) {
                 // Use server to serve the file
                 const encodedPath = encodeURIComponent(filePath);
-                const downloadUrl = `http://127.0.0.1:5000/api/extraction-file/${encodedPath}`;
+                const downloadUrl = `${SERVER_URL}/api/extraction-file/${encodedPath}`;
                 
                 const a = document.createElement('a');
                 a.href = downloadUrl;
