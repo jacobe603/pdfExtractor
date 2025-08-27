@@ -864,6 +864,10 @@
         let serverAvailable = false;
         let equipmentTypes = [];
 
+        // File management for dragged folders
+        let draggedFiles = new Map(); // Map: relative_path -> File object
+        let fileObjectUrls = new Map(); // Map: relative_path -> object_url
+
         // Dynamic server URL detection (same as main application)
         function getServerUrl() {
             return `http://${window.location.hostname}:5000`;
@@ -883,6 +887,9 @@
             // Setup event listeners
             setupEventListeners();
             setupModalEventListeners();
+            
+            // Cleanup on page unload to prevent memory leaks
+            window.addEventListener('beforeunload', clearFileObjects);
             
             // Try to load data from localStorage first
             tryLoadFromLocalStorage();
@@ -1093,8 +1100,12 @@
             if (extraction.imageData && extraction.imageData.startsWith('data:')) {
                 // Base64 image from localStorage
                 thumbnailHtml = `<img src="${extraction.imageData}" alt="Extraction thumbnail">`;
+            } else if (extraction.files && extraction.files.image && fileObjectUrls.has(extraction.files.image)) {
+                // Image file from dragged folder - use object URL
+                const imageUrl = fileObjectUrls.get(extraction.files.image);
+                thumbnailHtml = `<img src="${imageUrl}" alt="Extraction thumbnail" onerror="this.parentElement.innerHTML='<div class=\\'placeholder\\'>Image not available</div>'">`;
             } else if (extraction.files && extraction.files.image && serverAvailable) {
-                // Image file path - serve through Flask
+                // Image file path - serve through Flask (fallback)
                 const encodedPath = encodeURIComponent(extraction.files.image);
                 const imageUrl = `${SERVER_URL}/api/extraction-file/${encodedPath}`;
                 thumbnailHtml = `<img src="${imageUrl}" alt="Extraction thumbnail" onerror="this.parentElement.innerHTML='<div class=\\'placeholder\\'>Image not available</div>'">`;
@@ -1183,9 +1194,40 @@
             filterAndRenderExtractions();
         }
 
+        function clearFileObjects() {
+            // Revoke all existing object URLs to prevent memory leaks
+            fileObjectUrls.forEach((url, path) => {
+                URL.revokeObjectURL(url);
+                console.log(`Revoked object URL for: ${path}`);
+            });
+            
+            // Clear the maps
+            draggedFiles.clear();
+            fileObjectUrls.clear();
+        }
+
         function handleFolderLoad(event) {
             const files = Array.from(event.target.files);
             updateStatus('Loading folder data...');
+            
+            // Clear previous file mappings
+            clearFileObjects();
+            
+            // Store all files in our global map for direct access
+            files.forEach(file => {
+                if (file.webkitRelativePath) {
+                    draggedFiles.set(file.webkitRelativePath, file);
+                    
+                    // Create object URLs for image files
+                    if (file.type.startsWith('image/') || file.name.toLowerCase().endsWith('.png') || file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')) {
+                        const objectUrl = URL.createObjectURL(file);
+                        fileObjectUrls.set(file.webkitRelativePath, objectUrl);
+                        console.log(`Created object URL for: ${file.webkitRelativePath}`);
+                    }
+                }
+            });
+            
+            console.log(`Mapped ${draggedFiles.size} files, ${fileObjectUrls.size} image URLs`);
             
             // Look for project_data.json files
             const projectFiles = files.filter(file => file.name === 'project_data.json');
@@ -1229,15 +1271,12 @@
                     
                     console.log('Using basePath for folder browse:', basePath);
                     
-                    // For folder browsing, we need to use the server to resolve the full path
-                    // So let's send this to the server first to get proper path resolution
-                    if (basePath) {
-                        handleFolderServerLoad(projectData, basePath);
-                    } else {
-                        const extractions = extractFromProjectData(projectData, basePath);
-                        loadExtractionsData(extractions);
-                        updateStatus(`Loaded ${extractions.length} extractions from folder`);
-                    }
+                    // Process data directly since we have all files locally
+                    const extractions = extractFromProjectData(projectData, basePath);
+                    loadExtractionsData(extractions);
+                    updateStatus(`Loaded ${extractions.length} extractions from local folder`);
+                    
+                    console.log(`Loaded ${extractions.length} extractions with ${fileObjectUrls.size} images available locally`);
                 } catch (error) {
                     console.error('Error parsing project data:', error);
                     updateStatus('Error loading project data');
@@ -1620,8 +1659,17 @@
                 // Base64 image from localStorage
                 imageEl.src = extraction.imageData;
                 imageEl.style.display = 'block';
+            } else if (extraction.files && extraction.files.image && fileObjectUrls.has(extraction.files.image)) {
+                // Image file from dragged folder - use object URL
+                const imageUrl = fileObjectUrls.get(extraction.files.image);
+                imageEl.src = imageUrl;
+                imageEl.style.display = 'block';
+                imageEl.onerror = function() {
+                    this.style.display = 'none';
+                    console.error('Failed to load local image:', extraction.files.image);
+                };
             } else if (extraction.files && extraction.files.image && serverAvailable) {
-                // Image file path - serve through Flask
+                // Image file path - serve through Flask (fallback)
                 const encodedPath = encodeURIComponent(extraction.files.image);
                 const imageUrl = `${SERVER_URL}/api/extraction-file/${encodedPath}`;
                 imageEl.src = imageUrl;
@@ -1788,8 +1836,25 @@
         }
 
         function downloadFile(filePath, fileType) {
-            if (serverAvailable) {
-                // Use server to serve the file
+            // Check if we have the file locally from dragged folder
+            if (draggedFiles.has(filePath)) {
+                const file = draggedFiles.get(filePath);
+                const fileName = filePath.split('/').pop();
+                
+                // Create download link using the File object
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(file);
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                // Clean up the temporary object URL
+                setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+                
+                updateStatus(`Downloaded ${fileType} from local files`);
+            } else if (serverAvailable) {
+                // Use server to serve the file (fallback)
                 const encodedPath = encodeURIComponent(filePath);
                 const downloadUrl = `${SERVER_URL}/api/extraction-file/${encodedPath}`;
                 
@@ -1800,9 +1865,9 @@
                 a.click();
                 document.body.removeChild(a);
                 
-                updateStatus(`Downloading ${fileType}...`);
+                updateStatus(`Downloading ${fileType} from server...`);
             } else {
-                updateStatus('Server required for file downloads');
+                updateStatus('File not available for download');
             }
         }
 
