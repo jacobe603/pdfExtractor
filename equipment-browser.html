@@ -200,11 +200,92 @@
 
         .extractions-grid {
             flex: 1;
-            padding: 20px;
+            padding: 8px;
             overflow-y: auto;
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(450px, 1fr));
-            gap: 25px;
+            gap: 8px;
+            height: calc(100vh - 140px); /* Account for header and toolbar */
+        }
+
+        /* Dense grid for all items view */
+        .grid-all-items {
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        }
+
+        /* Limited grid for filtered view - maximize width */
+        .grid-filtered-triple {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .grid-filtered-double {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .grid-filtered-single {
+            grid-template-columns: 1fr;
+            padding: 0 40px; /* Minimal side padding for very wide screens */
+        }
+
+        /* Viewport-aware responsive grid with height optimization */
+        @media (min-width: 2560px) {
+            .grid-all-items {
+                grid-template-columns: repeat(10, 1fr);
+            }
+            .grid-all-items .extraction-card {
+                min-height: calc((100vh - 240px) / 3);
+            }
+        }
+
+        @media (min-width: 1920px) and (max-width: 2559px) {
+            .grid-all-items {
+                grid-template-columns: repeat(8, 1fr);
+            }
+            .grid-all-items .extraction-card {
+                min-height: calc((100vh - 240px) / 3.5);
+            }
+        }
+
+        @media (min-width: 1600px) and (max-width: 1919px) {
+            .grid-all-items {
+                grid-template-columns: repeat(7, 1fr);
+            }
+        }
+
+        @media (min-width: 1400px) and (max-width: 1599px) {
+            .grid-all-items {
+                grid-template-columns: repeat(6, 1fr);
+            }
+        }
+
+        @media (min-width: 1200px) and (max-width: 1399px) {
+            .grid-all-items {
+                grid-template-columns: repeat(5, 1fr);
+            }
+        }
+
+        @media (min-width: 1000px) and (max-width: 1199px) {
+            .grid-all-items {
+                grid-template-columns: repeat(4, 1fr);
+            }
+        }
+
+        /* Tall screen optimization */
+        @media (min-height: 1200px) {
+            .grid-all-items .extraction-thumbnail {
+                height: calc((100vh - 200px) / 3.5);
+                max-height: 350px;
+            }
+            .grid-filtered-single .extraction-thumbnail {
+                height: calc(100vh - 250px);
+                max-height: 1000px;
+            }
+        }
+
+        /* Ultra-wide screen optimization */
+        @media (min-aspect-ratio: 21/9) {
+            .grid-filtered-single {
+                padding: 0 15%; /* More padding for ultra-wide screens */
+            }
         }
 
         .extractions-list {
@@ -217,10 +298,13 @@
             background: white;
             border: 1px solid #dee2e6;
             border-radius: 8px;
-            padding: 20px;
             cursor: pointer;
             transition: all 0.3s;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            height: 100%; /* Fill available grid space */
+            min-height: 300px;
         }
 
         .extraction-card:hover {
@@ -231,7 +315,6 @@
 
         .extraction-thumbnail {
             width: 100%;
-            height: 300px;
             background: #f8f9fa;
             border-radius: 6px;
             margin-bottom: 15px;
@@ -239,18 +322,77 @@
             align-items: center;
             justify-content: center;
             overflow: hidden;
+            min-height: 200px; /* Fallback minimum */
         }
 
         .extraction-thumbnail img {
-            max-width: 100%;
-            max-height: 100%;
-            object-fit: contain;
+            width: 100%;
+            height: 100%;
+            object-fit: cover; /* Fill the space better */
+            object-position: center;
         }
 
         .extraction-thumbnail .placeholder {
             color: #6c757d;
             font-size: 14px;
             text-align: center;
+        }
+
+        /* Dynamic thumbnail size variations using viewport units */
+        .grid-all-items .extraction-thumbnail {
+            height: calc((100vh - 200px) / 4); /* Dynamic height based on viewport */
+            min-height: 150px;
+            max-height: 250px;
+            margin-bottom: 8px;
+        }
+
+        .grid-filtered-triple .extraction-thumbnail,
+        .grid-filtered-double .extraction-thumbnail {
+            height: calc((100vh - 180px) / 2.2); /* Larger for filtered views */
+            min-height: 300px;
+            max-height: 500px;
+            margin-bottom: 12px;
+        }
+
+        .grid-filtered-single .extraction-thumbnail {
+            height: calc(100vh - 280px); /* Maximum height for single items */
+            min-height: 400px;
+            max-height: 800px;
+            margin-bottom: 15px;
+        }
+
+        /* Card styling variations with flexible padding */
+        .grid-all-items .extraction-card {
+            padding: 8px;
+            min-height: calc((100vh - 240px) / 4);
+        }
+
+        .grid-all-items .extraction-title {
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+
+        .grid-all-items .extraction-info {
+            font-size: 11px;
+        }
+
+        /* Full-size cards for filtered view */
+        .grid-filtered-single .extraction-card,
+        .grid-filtered-double .extraction-card,
+        .grid-filtered-triple .extraction-card {
+            padding: 15px;
+            min-height: calc((100vh - 220px) / 2.2);
+        }
+
+        /* Single item gets maximum space */
+        .grid-filtered-single .extraction-card {
+            min-height: calc(100vh - 180px);
+            padding: 20px;
+        }
+
+        /* Make thumbnail flexible within card */
+        .extraction-thumbnail {
+            flex: 1;
         }
 
         .extraction-title {
@@ -411,17 +553,37 @@
             
             .equipment-sidebar {
                 width: 100%;
-                max-height: 200px;
+                max-height: 150px; /* Reduced to give more space to content */
             }
             
             .extractions-grid {
-                grid-template-columns: 1fr;
-                gap: 15px;
-                padding: 15px;
+                gap: 6px;
+                padding: 6px;
+                height: calc(100vh - 180px); /* Account for collapsed sidebar */
             }
             
-            .extraction-thumbnail {
-                height: 250px;
+            /* Force all grid variations to single column on mobile */
+            .grid-all-items,
+            .grid-filtered-single,
+            .grid-filtered-double,
+            .grid-filtered-triple {
+                grid-template-columns: 1fr !important;
+                max-width: none;
+            }
+            
+            /* Mobile-optimized thumbnail sizes */
+            .grid-all-items .extraction-thumbnail,
+            .grid-filtered-single .extraction-thumbnail,
+            .grid-filtered-double .extraction-thumbnail,
+            .grid-filtered-triple .extraction-thumbnail {
+                height: calc(100vh - 350px) !important;
+                min-height: 200px !important;
+                max-height: 400px !important;
+            }
+            
+            /* Mobile card optimization */
+            .extraction-card {
+                min-height: calc(100vh - 280px) !important;
             }
             
             .content-header {
@@ -1110,6 +1272,29 @@
                     </div>
                 `;
                 return;
+            }
+            
+            // Apply smart grid layout for grid view
+            if (viewMode === 'grid') {
+                const itemCount = filteredExtractions.length;
+                const isFiltered = currentEquipmentFilter !== 'all';
+                
+                // Clear all grid classes
+                container.classList.remove('grid-all-items', 'grid-filtered-single', 'grid-filtered-double', 'grid-filtered-triple');
+                
+                if (!isFiltered) {
+                    // All items - dense grid (5-8 columns based on screen)
+                    container.classList.add('grid-all-items');
+                } else {
+                    // Filtered by equipment type - limited columns
+                    if (itemCount === 1) {
+                        container.classList.add('grid-filtered-single');
+                    } else if (itemCount === 2) {
+                        container.classList.add('grid-filtered-double');
+                    } else {
+                        container.classList.add('grid-filtered-triple');
+                    }
+                }
             }
             
             container.innerHTML = '';
