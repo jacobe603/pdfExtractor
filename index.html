@@ -1067,6 +1067,16 @@
     <script>
         // Initialize PDF.js
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        // Reduce PDF.js warnings for optional content groups
+        const originalConsoleWarn = console.warn;
+        console.warn = function(message) {
+            // Filter out optional content group warnings
+            if (typeof message === 'string' && message.includes('Optional content group not found')) {
+                return; // Suppress these specific warnings
+            }
+            originalConsoleWarn.apply(console, arguments);
+        };
 
         // Application state
         let currentPDF = null;
@@ -2072,7 +2082,18 @@
                 
                 console.time('PDF Document Parsing');
                 currentPDFData = arrayBuffer.slice(); // Create a copy to prevent detachment
-                currentPDF = await pdfjsLib.getDocument(arrayBuffer).promise;
+                
+                // Configure PDF.js to handle optional content issues gracefully
+                const loadingTask = pdfjsLib.getDocument({
+                    data: arrayBuffer,
+                    disableAutoFetch: false,
+                    disableStream: false,
+                    disableRange: false,
+                    stopAtErrors: false, // Continue loading even with optional content errors
+                    ignoreErrors: true   // Ignore non-critical errors like missing OCG references
+                });
+                
+                currentPDF = await loadingTask.promise;
                 totalPages = currentPDF.numPages;
                 currentPage = 1;
                 console.timeEnd('PDF Document Parsing');
@@ -6713,7 +6734,18 @@
                             // Restore state
                             currentPDFPath = state.pdfPath;
                             currentPDFData = fileData.slice();
-                            currentPDF = await pdfjsLib.getDocument(fileData).promise;
+                            
+                            // Configure PDF.js to handle optional content issues gracefully
+                            const loadingTask = pdfjsLib.getDocument({
+                                data: fileData,
+                                disableAutoFetch: false,
+                                disableStream: false,
+                                disableRange: false,
+                                stopAtErrors: false,
+                                ignoreErrors: true
+                            });
+                            
+                            currentPDF = await loadingTask.promise;
                             totalPages = currentPDF.numPages;
                             currentPage = Math.min(state.currentPage, totalPages);
                             currentZoom = state.currentZoom;
