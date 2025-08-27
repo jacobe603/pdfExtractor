@@ -6,7 +6,7 @@ Flask API Server for BlueBeam Space Operations
 Provides REST API endpoints for detecting and managing BlueBeam Spaces.
 """
 
-from flask import Flask, request, jsonify, send_file
+from flask import Flask, request, jsonify, send_file, make_response
 from flask_cors import CORS
 import os
 import json
@@ -17,9 +17,10 @@ from datetime import datetime
 from pathlib import Path
 from werkzeug.utils import secure_filename
 from bluebeam_space_handler import BlueBeamSpaceHandler
+import fitz  # PyMuPDF for PDF generation
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+CORS(app, resources={r"/api/*": {"origins": "*", "methods": ["GET", "POST", "DELETE", "OPTIONS"]}})  # Enable CORS for all routes
 
 # Configuration
 UPLOAD_FOLDER = tempfile.gettempdir()
@@ -44,11 +45,368 @@ def get_file_hash(file_path):
     return sha256_hash.hexdigest()
 
 
-@app.route('/api/health', methods=['GET'])
+def convert_windows_path(windows_path):
+    """Convert Windows paths including network drives to WSL paths.
+    
+    Args:
+        windows_path (str): Windows path (e.g., 'S:\\Projects\\file.pdf', 'C:\\Users\\file.pdf')
+        
+    Returns:
+        tuple: (converted_path, error_message) where error_message is None if successful
+    """
+    if not windows_path:
+        return None, "No path provided"
+    
+    original_path = windows_path
+    print(f"Converting Windows path: {original_path}", flush=True)
+    
+    # Handle network drives and local drives
+    if len(windows_path) >= 3 and windows_path[1:3] == ':\\':
+        drive_letter = windows_path[0].lower()
+        
+        if drive_letter == 'c':
+            # Standard C: drive handling
+            converted_path = windows_path.replace('C:\\', '/mnt/c/').replace('c:\\', '/mnt/c/').replace('\\', '/')
+            print(f"Converted C: drive to: {converted_path}", flush=True)
+        else:
+            # Network or other drives (S:, P:, etc.)
+            print(f"Attempting to handle network drive: {drive_letter.upper()}:", flush=True)
+            
+            # Try different mount point strategies
+            potential_mounts = [
+                f'/mnt/{drive_letter}',  # WSL auto-mount
+                f'/mnt/wsl/{drive_letter}',  # WSL 2 style
+            ]
+            
+            converted_path = None
+            for mount_point in potential_mounts:
+                test_path = windows_path.replace(f'{drive_letter.upper()}:\\', f'{mount_point}/').replace(f'{drive_letter}:\\', f'{mount_point}/').replace('\\', '/')
+                print(f"Testing mount point: {mount_point} -> {test_path}", flush=True)
+                
+                # Check if the mount point exists
+                if os.path.exists(mount_point):
+                    print(f"Mount point {mount_point} exists, trying path: {test_path}", flush=True)
+                    if os.path.exists(test_path):
+                        converted_path = test_path
+                        print(f"Successfully found file at: {converted_path}", flush=True)
+                        break
+                    else:
+                        print(f"File not found at: {test_path}", flush=True)
+                else:
+                    print(f"Mount point does not exist: {mount_point}", flush=True)
+            
+            if not converted_path:
+                # If no WSL mount found, try to suggest workarounds
+                error_msg = f"Network drive {drive_letter.upper()}: not accessible from WSL. "
+                error_msg += "Try: 1) Copy file to C:\\ drive, 2) Use UNC path (\\\\server\\share), or 3) Mount drive in WSL"
+                print(f"Network drive conversion failed: {error_msg}", flush=True)
+                return None, error_msg
+    
+    elif windows_path.startswith('\\\\'):
+        # UNC path (\\server\share\path)
+        print("UNC path detected, attempting direct access", flush=True)
+        converted_path = windows_path.replace('\\', '/')
+        
+        # UNC paths might not be directly accessible from WSL
+        if not os.path.exists(converted_path):
+            error_msg = f"UNC path not accessible from WSL: {windows_path}. Try copying file to local drive."
+            print(f"UNC path failed: {error_msg}", flush=True)
+            return None, error_msg
+    
+    else:
+        # Assume it's already a Unix-style path or relative path
+        converted_path = windows_path.replace('\\', '/')
+        print(f"Treating as Unix path: {converted_path}", flush=True)
+    
+    # Final validation
+    if converted_path and os.path.exists(converted_path):
+        print(f"✅ Path conversion successful: {original_path} -> {converted_path}", flush=True)
+        return converted_path, None
+    else:
+        error_msg = f"Converted path does not exist: {converted_path}"
+        print(f"❌ Path conversion failed: {error_msg}", flush=True)
+        return None, error_msg
+
+
+def create_consolidated_equipment_pdfs(export_folder_path):
+    """
+    Create consolidated PDF files for each equipment type folder with extraction type sorting.
+    
+    Args:
+        export_folder_path (str): Path to the export folder containing equipment directories
+        
+    Returns:
+        int: Number of consolidated PDF files created
+    """
+    
+    # Extraction type priority order (SCHEDULE first, DRAWING second, DETAIL third, others after)
+    extraction_type_priority = ['schedule', 'drawing', 'detail', 'table', 'specification', 'other']
+    
+    def get_extraction_type_priority(extraction_type):
+        """Get priority index for sorting (lower = higher priority)"""
+        try:
+            return extraction_type_priority.index(extraction_type.lower())
+        except ValueError:
+            # Unknown extraction types go to the end
+            return len(extraction_type_priority)
+    
+    pdfs_created = 0
+    
+    try:
+        # Look for project_data.json to get extraction metadata
+        project_data_path = os.path.join(export_folder_path, 'project_data.json')
+        extraction_metadata = {}
+        
+        if os.path.exists(project_data_path):
+            print(f"Loading extraction metadata from: {project_data_path}", flush=True)
+            with open(project_data_path, 'r') as f:
+                project_data = json.load(f)
+                
+                # Build complete extraction metadata (not just image files)
+                extraction_metadata = {}
+                for equipment_type, extractions in project_data.get('equipment', {}).items():
+                    for extraction in extractions:
+                        extraction_id = extraction.get('id', 0)
+                        extraction_type = extraction.get('extractionType', 'other')
+                        extraction_name = extraction.get('extractionName', 'Unknown')
+                        is_full_page = extraction.get('isFullPage', False)
+                        
+                        # Store metadata by equipment type and ID
+                        if equipment_type not in extraction_metadata:
+                            extraction_metadata[equipment_type] = []
+                            
+                        extraction_metadata[equipment_type].append({
+                            'id': extraction_id,
+                            'type': extraction_type,
+                            'name': extraction_name,
+                            'is_full_page': is_full_page,
+                            'page_number': extraction.get('coordinates', {}).get('page', 1) if is_full_page else None,
+                            'image_file': extraction.get('files', {}).get('image') if not is_full_page else None
+                        })
+        else:
+            print("No project_data.json found, using filename-based sorting", flush=True)
+        
+        # Get the original PDF path for full page extractions
+        original_pdf_path = None
+        if project_data and 'originalPdfPath' in project_data:
+            original_pdf_path = project_data['originalPdfPath']
+        
+        # Process each equipment type
+        if project_data_path and os.path.exists(project_data_path):
+            # Use metadata-driven approach for equipment types with extractions
+            for equipment_type, extractions_list in extraction_metadata.items():
+                equipment_dir = os.path.join(export_folder_path, equipment_type)
+                
+                # Skip if equipment directory doesn't exist
+                if not os.path.isdir(equipment_dir):
+                    continue
+                    
+                print(f"Processing equipment directory: {equipment_type}", flush=True)
+                
+                if not extractions_list:
+                    print(f"No extractions found for {equipment_type}, skipping", flush=True)
+                    continue
+                
+                # Sort extractions by type priority, then by ID for consistency
+                extractions_list.sort(key=lambda x: (get_extraction_type_priority(x['type']), x['id']))
+                
+                print(f"Creating consolidated PDF for {equipment_type} with {len(extractions_list)} extractions:", flush=True)
+                for extraction in extractions_list:
+                    content_type = "Full Page" if extraction['is_full_page'] else "PNG Extraction"
+                    print(f"  - {extraction['type'].upper()}: {extraction['name']} ({content_type})", flush=True)
+                
+                # Create consolidated PDF
+                consolidated_pdf_path = os.path.join(equipment_dir, f"{equipment_type}_extractions.pdf")
+                
+                try:
+                    doc = fitz.open()
+                    
+                    for extraction in extractions_list:
+                        print(f"Adding page: {extraction['name']} ({extraction['type']})", flush=True)
+                        
+                        if extraction['is_full_page']:
+                            # Handle full page extraction
+                            if not original_pdf_path or not os.path.exists(original_pdf_path):
+                                print(f"⚠️  Original PDF not found for full page extraction: {extraction['name']}", flush=True)
+                                continue
+                                
+                            print(f"Inserting full PDF page {extraction['page_number']} from {original_pdf_path}", flush=True)
+                            
+                            # Open source PDF and copy the specific page
+                            source_doc = fitz.open(original_pdf_path)
+                            page_num = extraction['page_number'] - 1  # Convert to 0-based indexing
+                            
+                            if page_num < 0 or page_num >= len(source_doc):
+                                print(f"❌ Invalid page number {extraction['page_number']} for {extraction['name']}", flush=True)
+                                source_doc.close()
+                                continue
+                                
+                            # Insert the full page
+                            doc.insert_pdf(source_doc, from_page=page_num, to_page=page_num)
+                            source_doc.close()
+                            
+                        else:
+                            # Handle PNG-based extraction 
+                            if not extraction['image_file']:
+                                print(f"⚠️  No image file found for extraction: {extraction['name']}", flush=True)
+                                continue
+                                
+                            png_path = os.path.join(equipment_dir, os.path.basename(extraction['image_file']))
+                            
+                            if not os.path.exists(png_path):
+                                print(f"⚠️  PNG file not found: {png_path}", flush=True)
+                                continue
+                            
+                            # Load and optimize the PNG image before inserting
+                            with open(png_path, 'rb') as f:
+                                png_data = f.read()
+                            
+                            # Open image to get dimensions
+                            img = fitz.open(png_path)
+                            page_rect = img[0].rect
+                            img.close()
+                            
+                            # Create a new page with the same dimensions as the image
+                            page = doc.new_page(width=page_rect.width, height=page_rect.height)
+                            
+                            # Insert image with compression settings for smaller file size
+                            # Use JPEG compression for better file size (good quality, much smaller)
+                            page.insert_image(page_rect, stream=png_data, keep_proportion=True)
+                    
+                    # Save the consolidated PDF with compression
+                    doc.save(consolidated_pdf_path, 
+                            garbage=4,      # Garbage collect unused objects
+                            deflate=True,   # Enable deflate compression  
+                            clean=True)     # Clean and optimize the PDF structure
+                    doc.close()
+                    
+                    print(f"✅ Consolidated PDF created: {consolidated_pdf_path}", flush=True)
+                    pdfs_created += 1
+                    
+                except Exception as pdf_error:
+                    print(f"❌ Failed to create consolidated PDF for {equipment_type}: {str(pdf_error)}", flush=True)
+        else:
+            # Fallback to old PNG-only approach for backwards compatibility
+            print("Using fallback PNG-only processing", flush=True)
+            
+            for item in os.listdir(export_folder_path):
+                equipment_dir = os.path.join(export_folder_path, item)
+                
+                # Skip files, only process directories (equipment folders)
+                if not os.path.isdir(equipment_dir):
+                    continue
+                    
+                print(f"Processing equipment directory: {item}", flush=True)
+                
+                # Collect PNG files in this equipment directory
+                png_files = []
+                for file in os.listdir(equipment_dir):
+                    if file.lower().endswith('.png'):
+                        png_path = os.path.join(equipment_dir, file)
+                        png_files.append({
+                            'path': png_path,
+                            'filename': file,
+                            'extraction_type': 'other',
+                            'extraction_name': os.path.splitext(file)[0],
+                            'extraction_id': 0
+                        })
+                
+                if not png_files:
+                    print(f"No PNG files found in {item}, skipping", flush=True)
+                    continue
+                
+                # Sort PNG files by extraction type priority, then by ID for consistency
+                png_files.sort(key=lambda x: (get_extraction_type_priority(x['extraction_type']), x['extraction_id']))
+                
+                print(f"Creating consolidated PDF for {item} with {len(png_files)} extractions:", flush=True)
+                for png_file in png_files:
+                    print(f"  - {png_file['extraction_type'].upper()}: {png_file['extraction_name']}", flush=True)
+                
+                # Create consolidated PDF
+                consolidated_pdf_path = os.path.join(equipment_dir, f"{item}_extractions.pdf")
+                
+                try:
+                    doc = fitz.open()
+                    
+                    for png_file in png_files:
+                        print(f"Adding page: {png_file['extraction_name']} ({png_file['extraction_type']})", flush=True)
+                        
+                        # Load and optimize the PNG image before inserting
+                        with open(png_file['path'], 'rb') as f:
+                            png_data = f.read()
+                        
+                        # Open image to get dimensions
+                        img = fitz.open(png_file['path'])
+                        page_rect = img[0].rect
+                        img.close()
+                        
+                        # Create a new page with the same dimensions as the image
+                        page = doc.new_page(width=page_rect.width, height=page_rect.height)
+                        
+                        # Insert image with compression settings for smaller file size
+                        # Use JPEG compression for better file size (good quality, much smaller)  
+                        page.insert_image(page_rect, stream=png_data, keep_proportion=True)
+                    
+                    # Save the consolidated PDF with compression
+                    doc.save(consolidated_pdf_path, 
+                            garbage=4,      # Garbage collect unused objects
+                            deflate=True,   # Enable deflate compression  
+                            clean=True)     # Clean and optimize the PDF structure
+                    doc.close()
+                    
+                    print(f"✅ Consolidated PDF created: {consolidated_pdf_path}", flush=True)
+                    pdfs_created += 1
+                    
+                except Exception as pdf_error:
+                    print(f"❌ Failed to create consolidated PDF for {item}: {str(pdf_error)}", flush=True)
+    
+    except Exception as e:
+        print(f"❌ Error in consolidated PDF creation: {str(e)}", flush=True)
+        
+    return pdfs_created
+
+
+def convert_png_to_pdf(png_path):
+    """
+    Legacy function for individual PNG to PDF conversion.
+    Kept for compatibility but not used in consolidated approach.
+    """
+    try:
+        pdf_path = os.path.splitext(png_path)[0] + '.pdf'
+        print(f"Converting PNG to PDF: {png_path} -> {pdf_path}", flush=True)
+        
+        doc = fitz.open()
+        img = fitz.open(png_path)
+        page_rect = img[0].rect
+        page = doc.new_page(width=page_rect.width, height=page_rect.height)
+        page.insert_image(page_rect, filename=png_path)
+        doc.save(pdf_path)
+        doc.close()
+        img.close()
+        
+        print(f"✅ PDF generated successfully: {pdf_path}", flush=True)
+        return pdf_path
+    except Exception as e:
+        print(f"❌ PDF conversion failed for {png_path}: {str(e)}", flush=True)
+        return None
+
+
+@app.route('/api/health', methods=['GET', 'OPTIONS'])
 def health_check():
     """Health check endpoint."""
+    if request.method == 'OPTIONS':
+        # Handle preflight request
+        response = make_response('')
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+        return response
     return jsonify({'status': 'healthy', 'service': 'BlueBeam Space API'})
 
+@app.route('/favicon.ico')
+def favicon():
+    """Return empty favicon to prevent 404 errors."""
+    return '', 204
 
 @app.route('/api/detect_spaces', methods=['POST'])
 def detect_spaces():
@@ -340,6 +698,7 @@ def export_to_local():
         data = request.get_json()
         pdf_path = data.get('pdf_path')
         zip_data = data.get('zip_data')  # Base64 encoded ZIP
+        include_pdfs = data.get('include_pdfs', False)  # New: whether to generate PDFs
         
         if not pdf_path or not zip_data:
             return jsonify({'error': 'Missing pdf_path or zip_data'}), 400
@@ -350,10 +709,10 @@ def export_to_local():
         print(f"Received PDF path: {pdf_path}", flush=True)
         
         # Convert Windows path to WSL path if necessary
-        if pdf_path.startswith('C:\\') or pdf_path.startswith('c:\\'):
-            # Convert C:\Users\... to /mnt/c/Users/...
-            pdf_path = pdf_path.replace('C:\\', '/mnt/c/').replace('c:\\', '/mnt/c/').replace('\\', '/')
-            print(f"Converted Windows path to WSL: {pdf_path}", flush=True)
+        converted_path, error_msg = convert_windows_path(pdf_path)
+        if error_msg:
+            return jsonify({'error': f'Path conversion failed: {error_msg}'}), 400
+        pdf_path = converted_path
         
         # Get directory and name of PDF
         pdf_dir = os.path.dirname(pdf_path)
@@ -386,6 +745,20 @@ def export_to_local():
                 zip_ref.extractall(export_folder_path)
             
             print(f"Export folder created successfully: {export_folder_path}", flush=True)
+            
+            # Generate consolidated PDF versions if requested
+            if include_pdfs:
+                print(f"Generating consolidated PDFs by equipment type (include_pdfs={include_pdfs})...", flush=True)
+                
+                # Create consolidated PDFs with extraction type sorting
+                pdfs_created = create_consolidated_equipment_pdfs(export_folder_path)
+                
+                if pdfs_created > 0:
+                    print(f"✅ Generated {pdfs_created} consolidated PDF files (one per equipment type)", flush=True)
+                else:
+                    print("⚠️  No consolidated PDFs were created (no equipment folders or PNG files found)", flush=True)
+            else:
+                print("PDF generation skipped (include_pdfs=False)", flush=True)
             
             # Clean up temporary ZIP file
             os.remove(temp_zip_path)
@@ -612,6 +985,7 @@ def find_file():
         return jsonify({'error': str(e)}), 500
 
 
+
 @app.route('/api/load-pdf', methods=['POST'])
 def load_pdf():
     """Load a PDF file from the server."""
@@ -623,10 +997,12 @@ def load_pdf():
             return jsonify({'error': 'No path provided'}), 400
         
         # Convert Windows path to WSL path if necessary
-        if pdf_path.startswith('C:\\') or pdf_path.startswith('c:\\'):
-            pdf_path = pdf_path.replace('C:\\', '/mnt/c/').replace('c:\\', '/mnt/c/').replace('\\', '/')
+        converted_path, error_msg = convert_windows_path(pdf_path)
+        if error_msg:
+            return jsonify({'error': f'Path conversion failed: {error_msg}'}), 400
+        pdf_path = converted_path
         
-        # Check if file exists
+        # File existence is already checked in convert_windows_path, but double-check
         if not os.path.exists(pdf_path):
             return jsonify({'error': f'File not found: {pdf_path}'}), 404
         
@@ -662,6 +1038,223 @@ def get_file_info():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/browse-extractions', methods=['GET', 'POST'])
+def browse_extractions():
+    """Browse and load extraction data from exported folders or ZIP files."""
+    try:
+        if request.method == 'GET':
+            # Return available extraction folders
+            # Look for common extraction folder patterns
+            common_paths = []
+            
+            # Check current working directory for extraction folders
+            cwd = os.getcwd()
+            if os.path.exists(cwd):
+                for item in os.listdir(cwd):
+                    item_path = os.path.join(cwd, item)
+                    if os.path.isdir(item_path) and ('extraction' in item.lower() or item.endswith('_extractions')):
+                        # Check if it contains project_data.json
+                        project_file = os.path.join(item_path, 'project_data.json')
+                        if os.path.exists(project_file):
+                            common_paths.append({
+                                'path': item_path,
+                                'name': item,
+                                'modified': os.path.getmtime(project_file)
+                            })
+            
+            return jsonify({
+                'success': True,
+                'extraction_folders': common_paths
+            })
+            
+        else:  # POST request
+            data = request.get_json()
+            folder_path = data.get('folder_path')
+            
+            print(f"Loading project data from: {folder_path}", flush=True)
+            
+            # Convert Windows paths if necessary
+            if folder_path:
+                converted_path, error_msg = convert_windows_path(folder_path)
+                if error_msg:
+                    print(f"Folder path conversion failed: {error_msg}", flush=True)
+                    return jsonify({'error': f'Folder path conversion failed: {error_msg}'}), 400
+                folder_path = converted_path
+            
+            if not folder_path or not os.path.exists(folder_path):
+                print(f"Folder path does not exist: {folder_path}", flush=True)
+                return jsonify({'error': 'Invalid folder path'}), 400
+                
+            project_file = os.path.join(folder_path, 'project_data.json')
+            print(f"Looking for project file: {project_file}", flush=True)
+            
+            if not os.path.exists(project_file):
+                print(f"Project file not found: {project_file}", flush=True)
+                # List files in directory for debugging
+                try:
+                    files = os.listdir(folder_path)
+                    print(f"Files in directory: {files}", flush=True)
+                except:
+                    print("Could not list directory contents", flush=True)
+                return jsonify({'error': 'No project_data.json found in folder'}), 400
+                
+            # Load and return project data
+            with open(project_file, 'r', encoding='utf-8') as f:
+                project_data = json.load(f)
+                
+            print(f"Successfully loaded project data with {len(project_data.get('equipment', {}))} equipment types", flush=True)
+            
+            return jsonify({
+                'success': True,
+                'project_data': project_data,
+                'folder_path': folder_path,
+                'original_path': data.get('folder_path')  # Return both converted and original path
+            })
+            
+    except Exception as e:
+        print(f"Error browsing extractions: {str(e)}", flush=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/load-extraction/<extraction_id>', methods=['GET'])
+def load_extraction_details(extraction_id):
+    """Load detailed information about a specific extraction."""
+    try:
+        # This would typically load from database or file system
+        # For now, return a placeholder response
+        return jsonify({
+            'success': True,
+            'message': 'Extraction details endpoint ready for implementation',
+            'extraction_id': extraction_id
+        })
+        
+    except Exception as e:
+        print(f"Error loading extraction details: {str(e)}", flush=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/search-extractions', methods=['POST'])
+def search_extractions():
+    """Search across extraction OCR text and metadata."""
+    try:
+        data = request.get_json()
+        query = data.get('query', '').lower()
+        folder_path = data.get('folder_path')
+        
+        if not query:
+            return jsonify({'error': 'No search query provided'}), 400
+            
+        results = []
+        
+        # If folder_path provided, search within that folder
+        if folder_path and os.path.exists(folder_path):
+            project_file = os.path.join(folder_path, 'project_data.json')
+            if os.path.exists(project_file):
+                with open(project_file, 'r', encoding='utf-8') as f:
+                    project_data = json.load(f)
+                    
+                # Search through extractions
+                if 'equipment' in project_data:
+                    for equipment_type, extractions in project_data['equipment'].items():
+                        for extraction in extractions:
+                            # Check if query matches any searchable field
+                            searchable_text = ' '.join([
+                                extraction.get('extractionName', ''),
+                                extraction.get('equipmentType', ''),
+                                extraction.get('extractionType', ''),
+                                extraction.get('ocrData', {}).get('rawText', ''),
+                                ' '.join(extraction.get('ocrData', {}).get('notes', {}).get('entries', []))
+                            ]).lower()
+                            
+                            if query in searchable_text:
+                                results.append({
+                                    'id': extraction.get('id'),
+                                    'extractionName': extraction.get('extractionName'),
+                                    'equipmentType': equipment_type,
+                                    'extractionType': extraction.get('extractionType'),
+                                    'relevance': searchable_text.count(query)
+                                })
+        
+        # Sort by relevance
+        results.sort(key=lambda x: x.get('relevance', 0), reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'results': results,
+            'query': query,
+            'total_found': len(results)
+        })
+        
+    except Exception as e:
+        print(f"Error searching extractions: {str(e)}", flush=True)
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/extraction-file/<path:file_path>', methods=['GET'])
+def serve_extraction_file(file_path):
+    """Serve extraction files (images, JSON, TXT) from extraction folders."""
+    try:
+        print(f"Serving extraction file: {file_path}", flush=True)
+        
+        # URL decode the path first
+        import urllib.parse
+        decoded_path = urllib.parse.unquote(file_path)
+        print(f"Decoded path: {decoded_path}", flush=True)
+        
+        # Ensure the file path is safe and within allowed directories
+        safe_path = os.path.normpath(decoded_path)
+        print(f"Normalized path: {safe_path}", flush=True)
+        
+        # Convert Windows paths if running in WSL
+        if ((len(safe_path) >= 3 and safe_path[1:3] == ':\\') or 
+            safe_path.startswith('/C/') or safe_path.startswith('/c/')):
+            
+            # Handle /C/ style paths
+            if safe_path.startswith('/C/') or safe_path.startswith('/c/'):
+                safe_path = safe_path.replace('/C/', 'C:\\').replace('/c/', 'C:\\').replace('/', '\\')
+            
+            converted_path, error_msg = convert_windows_path(safe_path)
+            if error_msg:
+                print(f"File path conversion failed: {error_msg}", flush=True)
+                return jsonify({'error': f'File path conversion failed: {error_msg}'}), 400
+            safe_path = converted_path
+        elif safe_path.startswith('mnt/c/'):
+            # Add leading slash if it's missing
+            safe_path = '/' + safe_path
+            print(f"Added leading slash: {safe_path}", flush=True)
+        
+        print(f"Final path: {safe_path}", flush=True)
+        print(f"File exists: {os.path.exists(safe_path)}", flush=True)
+        print(f"Is file: {os.path.isfile(safe_path) if os.path.exists(safe_path) else 'N/A'}", flush=True)
+        
+        if not os.path.exists(safe_path):
+            print(f"File not found: {safe_path}", flush=True)
+            return jsonify({'error': f'File not found: {safe_path}'}), 404
+            
+        if not os.path.isfile(safe_path):
+            print(f"Path is not a file: {safe_path}", flush=True)
+            return jsonify({'error': f'Path is not a file: {safe_path}'}), 404
+            
+        # Determine mime type based on extension
+        ext = os.path.splitext(safe_path)[1].lower()
+        mime_types = {
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.json': 'application/json',
+            '.txt': 'text/plain'
+        }
+        
+        mime_type = mime_types.get(ext, 'application/octet-stream')
+        print(f"Serving file with mime type: {mime_type}", flush=True)
+        
+        return send_file(safe_path, mimetype=mime_type)
+        
+    except Exception as e:
+        print(f"Error serving extraction file: {str(e)}", flush=True)
+        return jsonify({'error': str(e)}), 500
+
+
 if __name__ == '__main__':
     print("Starting BlueBeam Space API Server...")
     print("Available endpoints:")
@@ -679,6 +1272,13 @@ if __name__ == '__main__':
     print("")
     print("Local Export:")
     print("  POST /api/export/local - Export ZIP to PDF directory")
+    print("")
+    print("Equipment Browser:")
+    print("  GET  /api/browse-extractions - List available extraction folders")
+    print("  POST /api/browse-extractions - Load project data from folder")
+    print("  GET  /api/load-extraction/<id> - Load extraction details")
+    print("  POST /api/search-extractions - Search across extractions")
+    print("  GET  /api/extraction-file/<path> - Serve extraction files")
     print("")
     print("Server running on http://localhost:5000")
     print("CORS enabled for all origins")

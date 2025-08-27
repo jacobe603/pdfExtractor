@@ -7,7 +7,8 @@
 
 class BlueBeamSpaceManager {
     constructor() {
-        this.apiUrl = 'http://localhost:5000/api';
+        // Use dynamic hostname like the main app
+        this.apiUrl = `http://${window.location.hostname}:5000/api`;
         this.spaces = [];
         this.pageSpaces = {}; // Spaces organized by page number
         this.spacesVisible = true;

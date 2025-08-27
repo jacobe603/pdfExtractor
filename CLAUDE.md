@@ -19,8 +19,9 @@ A sophisticated PDF table extraction tool built for construction schedule analys
 - **Multi-Type Extractions**: Schedule, Drawing, Table, Detail, Specification, Other
 - **Advanced OCR System**: Gemini API with comprehensive notes extraction, Tesseract.js for offline use
 - **Installation Notes Extraction**: Automatically captures numbered installation requirements and specifications
-- **Comprehensive File Generation**: PNG images, JSON table data, TXT text files with notes sections
+- **Comprehensive File Generation**: PNG images, individual PDF files, JSON table data, TXT text files with notes sections
 - **Real-time Selection**: Canvas-based rectangle drawing with zoom support
+- **PDF Generation**: PNG-to-PDF conversion using PyMuPDF for individual extraction PDFs
 
 ## File Structure
 ```
@@ -108,6 +109,7 @@ python batch_processor.py exported_data.json -o organized_schedules -r -v
 ### Generated Files
 - **Main JSON**: Complete project data with equipment grouping and notes
 - **Images**: High-resolution PNG extractions
+- **PDF Files**: Individual PDF versions of each PNG extraction (optional, enabled by default)
 - **Table Data**: Detailed OCR results in JSON format with structured notes
 - **Text Files**: Human-readable text with metadata headers and installation notes sections
 
@@ -129,6 +131,11 @@ python batch_processor.py exported_data.json -o organized_schedules -r -v
 - `getExtractionTypeIcon()` - Visual type indicators
 - Equipment-based file organization
 
+### PDF Generation
+- `convert_png_to_pdf()` - Server-side PNG to PDF conversion using PyMuPDF
+- Settings-controlled PDF generation (enabled by default)
+- Maintains file organization structure with PDF versions alongside PNGs
+
 ## Development Notes
 
 ### Recent Enhancements
@@ -139,6 +146,7 @@ python batch_processor.py exported_data.json -o organized_schedules -r -v
 - **UI Improvements**: Type icons, custom equipment support, better organization, OCR preview with notes
 - **Data Structure Compatibility**: Handles both legacy and new OCR data formats
 - **Simplified Modal Workflow**: Back-to-basics approach with immediate OCR processing and simplified save function
+- **PDF Generation Integration**: Added PyMuPDF-based PNG-to-PDF conversion with settings control
 
 ### Technical Decisions
 - **Modular OCR**: Separate providers for flexibility and fallback
@@ -148,6 +156,7 @@ python batch_processor.py exported_data.json -o organized_schedules -r -v
 - **Comprehensive Prompt Engineering**: Advanced Gemini prompts for header disambiguation and notes extraction
 - **Structured Notes Storage**: Consistent format for installation requirements across all output types
 - **Simplified OCR Workflow**: Removed complex queue systems in favor of immediate processing and post-save options
+- **PNG-to-PDF Approach**: Current implementation converts PNG extractions to PDF for simplicity and reliability
 
 ### Performance Considerations
 - **Canvas Optimization**: Efficient PDF rendering with zoom support
@@ -161,6 +170,7 @@ python batch_processor.py exported_data.json -o organized_schedules -r -v
 - **Export Formats**: Additional export options (CSV, Excel, etc.)
 - **Cloud Integration**: Direct cloud storage integration
 - **Mobile Support**: Touch-friendly interface for tablets
+- **Vector PDF Generation**: Optional enhancement to extract vector graphics and text directly from PDFs using PyMuPDF's `page.get_drawings()` and `get_text("dict")` for perfect scalable quality (documented 2025-08-27)
 
 ## Troubleshooting
 
@@ -182,7 +192,8 @@ python batch_processor.py exported_data.json -o organized_schedules -r -v
 - **Notes Extraction**: Test schedules with and without installation notes
 - **Header Disambiguation**: Test complex schedules with repeated column names
 - **Batch Processing**: Test with various JSON formats and equipment groupings
-- **File Generation**: Verify PNG, JSON, and TXT file creation with notes sections
+- **File Generation**: Verify PNG, PDF, JSON, and TXT file creation with notes sections
+- **PDF Generation**: Test PNG-to-PDF conversion with and without settings enabled
 - **Modal Workflow**: Test immediate OCR in modal, save without OCR, and post-save OCR button
 - **UI Workflow**: Test modal preview shows both tables and notes correctly
 

@@ -23,7 +23,8 @@
     "enableTextExtraction": true,
     "autoRunOCR": false,
     "ocrProvider": "auto",
-    "defaultZoomLevel": 1.0
+    "defaultZoomLevel": 1.0,
+    "includePDFVersions": true
   },
   "searchPresets": [
     "CFM",

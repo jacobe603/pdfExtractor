@@ -1,0 +1,1831 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Equipment Browser - PDF Schedule Extractor</title>
+    
+    <!-- Settings Manager -->
+    <script src="settings-manager.js"></script>
+    
+    <!-- ZIP File Support for loading exports -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .toolbar {
+            background: #2c3e50;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .toolbar-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .toolbar h1 {
+            font-size: 1.2em;
+            font-weight: 600;
+        }
+
+        .btn {
+            background: #27ae60;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            background: #219a52;
+        }
+
+        .btn.secondary {
+            background: #3498db;
+        }
+
+        .btn.secondary:hover {
+            background: #2980b9;
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .equipment-sidebar {
+            width: 250px;
+            background: white;
+            border-right: 1px solid #dee2e6;
+            padding: 15px;
+            overflow-y: auto;
+            box-shadow: 2px 0 4px rgba(0,0,0,0.1);
+        }
+
+        .equipment-sidebar h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        .equipment-filter {
+            margin-bottom: 15px;
+        }
+
+        .equipment-type {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 5px;
+            border: 1px solid #e9ecef;
+        }
+
+        .equipment-type:hover {
+            background: #f8f9fa;
+        }
+
+        .equipment-type.active {
+            background: #e3f2fd;
+            border-color: #2196f3;
+            color: #1976d2;
+        }
+
+        .equipment-label {
+            font-weight: 500;
+        }
+
+        .equipment-count {
+            background: #6c757d;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            min-width: 20px;
+            text-align: center;
+        }
+
+        .equipment-type.active .equipment-count {
+            background: #1976d2;
+        }
+
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .content-header {
+            background: white;
+            padding: 15px 20px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .search-bar {
+            flex: 1;
+            max-width: 500px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+
+        .view-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .view-toggle {
+            display: flex;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .view-toggle button {
+            background: white;
+            border: none;
+            padding: 8px 12px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .view-toggle button.active {
+            background: #3498db;
+            color: white;
+        }
+
+        .extractions-grid {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .extractions-list {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .extraction-card {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .extraction-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border-color: #3498db;
+        }
+
+        .extraction-thumbnail {
+            width: 100%;
+            height: 150px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .extraction-thumbnail img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .extraction-thumbnail .placeholder {
+            color: #6c757d;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .extraction-title {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 8px;
+            font-size: 1.1em;
+        }
+
+        .extraction-meta {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .meta-tag {
+            background: #e9ecef;
+            color: #495057;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+        }
+
+        .meta-tag.equipment {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .meta-tag.type {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .extraction-preview {
+            color: #6c757d;
+            font-size: 0.9em;
+            line-height: 1.4;
+            margin-bottom: 10px;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .extraction-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .action-btn {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 6px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+            transition: all 0.2s;
+        }
+
+        .action-btn:hover {
+            background: #e9ecef;
+        }
+
+        .action-btn.primary {
+            background: #3498db;
+            color: white;
+            border-color: #3498db;
+        }
+
+        .action-btn.primary:hover {
+            background: #2980b9;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px 20px;
+            color: #6c757d;
+        }
+
+        .no-results h3 {
+            margin-bottom: 10px;
+        }
+
+        .load-data-section {
+            text-align: center;
+            padding: 40px;
+            background: white;
+            margin: 20px;
+            border-radius: 8px;
+            border: 2px dashed #dee2e6;
+        }
+
+        .load-data-section h3 {
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+
+        .file-input {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+            margin: 5px;
+        }
+
+        .file-input input[type=file] {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-input label {
+            background: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.3s;
+            display: inline-block;
+        }
+
+        .file-input label:hover {
+            background: #2980b9;
+        }
+
+        .status-bar {
+            background: #2c3e50;
+            color: white;
+            padding: 8px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9em;
+        }
+
+        .server-status {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #e74c3c;
+        }
+
+        .status-indicator.online {
+            background: #27ae60;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            
+            .equipment-sidebar {
+                width: 100%;
+                max-height: 200px;
+            }
+            
+            .extractions-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .content-header {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <div class="toolbar-left">
+            <h1>Equipment Browser</h1>
+        </div>
+        <div>
+            <a href="#" onclick="navigateToPDFViewer(); return false;" class="btn secondary">PDF Viewer</a>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="equipment-sidebar">
+            <h3>Equipment Types</h3>
+            <div class="equipment-filter">
+                <div class="equipment-type active" data-equipment="all">
+                    <span class="equipment-label">All Equipment</span>
+                    <span class="equipment-count" id="total-count">0</span>
+                </div>
+            </div>
+            <div id="equipment-types-list">
+                <!-- Equipment types will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <div class="content-area">
+            <div class="content-header">
+                <div class="search-bar">
+                    <input type="text" class="search-input" placeholder="Search across all extractions..." id="search-input">
+                </div>
+                <div class="view-controls">
+                    <div class="view-toggle">
+                        <button class="active" id="grid-view-btn">Grid</button>
+                        <button id="list-view-btn">List</button>
+                    </div>
+                    <button class="btn" id="refresh-data-btn">Refresh</button>
+                </div>
+            </div>
+
+            <div id="load-data-section" class="load-data-section">
+                <h3>Load Extraction Data</h3>
+                <p>Load your extracted schedules from exported folders or localStorage</p>
+                <div style="margin-top: 15px;">
+                    <div class="file-input">
+                        <input type="file" id="load-folder-input" webkitdirectory directory multiple>
+                        <label for="load-folder-input">Browse Folder</label>
+                    </div>
+                    <div class="file-input">
+                        <input type="file" id="load-zip-input" accept=".zip">
+                        <label for="load-zip-input">Load ZIP</label>
+                    </div>
+                    <button class="btn" id="load-local-storage-btn">Load from Current Session</button>
+                </div>
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #dee2e6;">
+                    <p style="color: #6c757d; margin-bottom: 10px;">Or enter folder path directly:</p>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <input type="text" id="folder-path-input" placeholder="C:\Users\jacob\Claude\TEST DOCUMENTS\~1177070 Sales Plans thru Addm 1_extractions_20250826_144419" 
+                               style="flex: 1; padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                        <button class="btn" id="load-path-btn">Load Path</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="extractions-container" class="extractions-grid" style="display: none;">
+                <!-- Extractions will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span id="status-text">Ready</span>
+        <div class="server-status">
+            <span class="status-indicator" id="server-indicator"></span>
+            <span id="server-status-text">Checking server...</span>
+        </div>
+    </div>
+
+    <!-- Extraction Details Modal -->
+    <div id="extraction-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-extraction-title">Extraction Details</h2>
+                <span class="close-btn" id="close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="modal-tabs">
+                    <button class="tab-btn active" data-tab="preview">Preview</button>
+                    <button class="tab-btn" data-tab="ocr">OCR Text</button>
+                    <button class="tab-btn" data-tab="notes">Notes</button>
+                    <button class="tab-btn" data-tab="files">Files</button>
+                </div>
+                
+                <div id="tab-preview" class="tab-content active">
+                    <div class="extraction-image-container">
+                        <img id="modal-extraction-image" src="" alt="Extraction preview" style="max-width: 100%; height: auto;">
+                    </div>
+                    <div class="extraction-metadata">
+                        <div class="meta-row">
+                            <span class="meta-label">Equipment Type:</span>
+                            <span id="modal-equipment-type"></span>
+                        </div>
+                        <div class="meta-row">
+                            <span class="meta-label">Extraction Type:</span>
+                            <span id="modal-extraction-type"></span>
+                        </div>
+                        <div class="meta-row">
+                            <span class="meta-label">Page:</span>
+                            <span id="modal-page-number"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="tab-ocr" class="tab-content">
+                    <div class="ocr-text-container">
+                        <h4>Raw OCR Text</h4>
+                        <div class="ocr-text-box">
+                            <pre id="modal-ocr-text">No OCR text available</pre>
+                        </div>
+                        <h4>Table Data</h4>
+                        <div id="modal-table-data" class="table-data-container">
+                            No table data available
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="tab-notes" class="tab-content">
+                    <div class="notes-container">
+                        <h4>Installation Notes</h4>
+                        <div id="modal-notes-list" class="notes-list">
+                            No notes available
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="tab-files" class="tab-content">
+                    <div class="files-container">
+                        <h4>Associated Files</h4>
+                        <div id="modal-files-list" class="files-list">
+                            No files available
+                        </div>
+                        
+                        <!-- Future SPEC attachment drop zone -->
+                        <div class="spec-drop-zone" id="spec-drop-zone" style="display: none;">
+                            <div class="drop-zone-content">
+                                <div class="drop-zone-icon">📎</div>
+                                <p><strong>Drop SPEC files here</strong></p>
+                                <p>Drag and drop PDF specification files to attach them to this extraction</p>
+                                <button class="btn" id="browse-spec-files">Browse Files</button>
+                                <input type="file" id="spec-files-input" multiple accept=".pdf" style="display: none;">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" id="download-extraction-btn">Download Files</button>
+                <button class="btn secondary" id="close-modal-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* Modal Styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 900px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: #2c3e50;
+        }
+
+        .close-btn {
+            font-size: 24px;
+            cursor: pointer;
+            color: #6c757d;
+            line-height: 1;
+        }
+
+        .close-btn:hover {
+            color: #e74c3c;
+        }
+
+        .modal-body {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-tabs {
+            display: flex;
+            border-bottom: 1px solid #dee2e6;
+            background: #f8f9fa;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            padding: 12px 20px;
+            cursor: pointer;
+            font-weight: 500;
+            color: #6c757d;
+            transition: all 0.2s;
+        }
+
+        .tab-btn.active,
+        .tab-btn:hover {
+            color: #3498db;
+            background: white;
+            border-bottom: 2px solid #3498db;
+        }
+
+        .tab-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .extraction-image-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .extraction-metadata {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+        }
+
+        .meta-row {
+            display: flex;
+            margin-bottom: 8px;
+        }
+
+        .meta-label {
+            font-weight: 600;
+            width: 140px;
+            color: #2c3e50;
+        }
+
+        .ocr-text-box {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .ocr-text-box pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+
+        .table-data-container {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            max-height: 400px;
+            overflow: auto;
+        }
+
+        .notes-list {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+        }
+
+        .note-item {
+            margin-bottom: 10px;
+            padding: 8px;
+            background: white;
+            border-left: 3px solid #3498db;
+            border-radius: 4px;
+        }
+
+        .files-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-icon {
+            width: 20px;
+            height: 20px;
+            background: #3498db;
+            border-radius: 3px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 10px;
+            font-weight: bold;
+        }
+
+        .modal-footer {
+            padding: 20px;
+            border-top: 1px solid #dee2e6;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* Table styling for OCR data */
+        .ocr-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .ocr-table th,
+        .ocr-table td {
+            border: 1px solid #dee2e6;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .ocr-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+
+        .ocr-table tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+
+        /* SPEC Drop Zone Styles */
+        .spec-drop-zone {
+            margin-top: 20px;
+            padding: 30px;
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            background: #f8f9fa;
+            text-align: center;
+            transition: all 0.3s ease;
+        }
+
+        .spec-drop-zone.drag-over {
+            border-color: #3498db;
+            background: #e3f2fd;
+        }
+
+        .drop-zone-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .drop-zone-icon {
+            font-size: 48px;
+            opacity: 0.5;
+            margin-bottom: 10px;
+        }
+
+        .spec-drop-zone p {
+            margin: 5px 0;
+            color: #6c757d;
+        }
+
+        .spec-drop-zone p strong {
+            color: #2c3e50;
+        }
+
+        .spec-drop-zone .btn {
+            margin-top: 10px;
+            background: #8e44ad;
+        }
+
+        .spec-drop-zone .btn:hover {
+            background: #7d3c98;
+        }
+    </style>
+
+    <script>
+        // Global variables
+        let extractionsData = [];
+        let filteredExtractions = [];
+        let currentEquipmentFilter = 'all';
+        let searchQuery = '';
+        let viewMode = 'grid';
+        let serverAvailable = false;
+        let equipmentTypes = [];
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('Equipment Browser initialized');
+            
+            // Initialize settings
+            await initializeSettings();
+            
+            // Check server status
+            await checkServerStatus();
+            
+            // Setup event listeners
+            setupEventListeners();
+            setupModalEventListeners();
+            
+            // Try to load data from localStorage first
+            tryLoadFromLocalStorage();
+        });
+
+        async function initializeSettings() {
+            try {
+                const settings = await window.settingsManager.init();
+                equipmentTypes = settings.equipmentTypes || [];
+                renderEquipmentTypes();
+            } catch (error) {
+                console.error('Failed to initialize settings:', error);
+                // Use fallback equipment types
+                equipmentTypes = [
+                    { value: 'FANS', label: 'FANS' },
+                    { value: 'VAV', label: 'VAV' },
+                    { value: 'RTU', label: 'RTU' },
+                    { value: 'AHU', label: 'AHU' },
+                    { value: 'GRD', label: 'GRD' },
+                    { value: 'DUCTING', label: 'DUCTING' },
+                    { value: 'OTHER', label: 'OTHER' }
+                ];
+                renderEquipmentTypes();
+            }
+        }
+
+        function renderEquipmentTypes() {
+            const container = document.getElementById('equipment-types-list');
+            container.innerHTML = '';
+
+            equipmentTypes.forEach(type => {
+                const count = getEquipmentCount(type.value);
+                const div = document.createElement('div');
+                div.className = 'equipment-type';
+                div.dataset.equipment = type.value;
+                div.innerHTML = `
+                    <span class="equipment-label">${type.label}</span>
+                    <span class="equipment-count">${count}</span>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function getEquipmentCount(equipmentType) {
+            if (equipmentType === 'all') {
+                return extractionsData.length;
+            }
+            return extractionsData.filter(ext => ext.equipmentType === equipmentType).length;
+        }
+
+        async function checkServerStatus() {
+            try {
+                // Create an AbortController for timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                
+                const response = await fetch('http://127.0.0.1:5000/api/health', { 
+                    method: 'GET',
+                    mode: 'cors',
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    serverAvailable = data.status === 'healthy';
+                    updateServerStatus(serverAvailable, serverAvailable ? 'Server online' : 'Server unhealthy');
+                } else {
+                    throw new Error('Server not responding');
+                }
+            } catch (error) {
+                console.error('Server health check failed:', error);
+                serverAvailable = false;
+                updateServerStatus(false, error.name === 'AbortError' ? 'Server timeout' : 'Server offline');
+            }
+        }
+
+        function updateServerStatus(online, message) {
+            const indicator = document.getElementById('server-indicator');
+            const statusText = document.getElementById('server-status-text');
+            
+            if (online) {
+                indicator.classList.add('online');
+                statusText.textContent = message;
+            } else {
+                indicator.classList.remove('online');
+                statusText.textContent = message;
+            }
+        }
+
+        function setupEventListeners() {
+            // Equipment type filtering
+            document.addEventListener('click', function(e) {
+                if (e.target.closest('.equipment-type')) {
+                    const equipmentType = e.target.closest('.equipment-type').dataset.equipment;
+                    setEquipmentFilter(equipmentType);
+                }
+            });
+
+            // Search functionality
+            document.getElementById('search-input').addEventListener('input', function(e) {
+                searchQuery = e.target.value.toLowerCase();
+                filterAndRenderExtractions();
+            });
+
+            // View toggle
+            document.getElementById('grid-view-btn').addEventListener('click', function() {
+                setViewMode('grid');
+            });
+
+            document.getElementById('list-view-btn').addEventListener('click', function() {
+                setViewMode('list');
+            });
+
+            // Data loading
+            document.getElementById('load-folder-input').addEventListener('change', handleFolderLoad);
+            document.getElementById('load-zip-input').addEventListener('change', handleZipLoad);
+            document.getElementById('load-local-storage-btn').addEventListener('click', tryLoadFromLocalStorage);
+            document.getElementById('load-path-btn').addEventListener('click', handlePathLoad);
+            document.getElementById('refresh-data-btn').addEventListener('click', refreshData);
+        }
+
+        function setEquipmentFilter(equipmentType) {
+            currentEquipmentFilter = equipmentType;
+            
+            // Update UI
+            document.querySelectorAll('.equipment-type').forEach(el => {
+                el.classList.remove('active');
+            });
+            
+            document.querySelector(`[data-equipment="${equipmentType}"]`).classList.add('active');
+            
+            // Filter and render
+            filterAndRenderExtractions();
+        }
+
+        function setViewMode(mode) {
+            viewMode = mode;
+            
+            // Update toggle buttons
+            document.getElementById('grid-view-btn').classList.toggle('active', mode === 'grid');
+            document.getElementById('list-view-btn').classList.toggle('active', mode === 'list');
+            
+            // Update container class
+            const container = document.getElementById('extractions-container');
+            container.className = mode === 'grid' ? 'extractions-grid' : 'extractions-list';
+            
+            // Re-render with new view
+            renderExtractions();
+        }
+
+        function filterAndRenderExtractions() {
+            filteredExtractions = extractionsData.filter(extraction => {
+                // Equipment type filter
+                if (currentEquipmentFilter !== 'all' && extraction.equipmentType !== currentEquipmentFilter) {
+                    return false;
+                }
+                
+                // Search filter
+                if (searchQuery) {
+                    const searchableText = [
+                        extraction.extractionName || '',
+                        extraction.equipmentType || '',
+                        extraction.extractionType || '',
+                        extraction.ocrText || '',
+                        extraction.notes || ''
+                    ].join(' ').toLowerCase();
+                    
+                    if (!searchableText.includes(searchQuery)) {
+                        return false;
+                    }
+                }
+                
+                return true;
+            });
+            
+            renderExtractions();
+        }
+
+        function renderExtractions() {
+            const container = document.getElementById('extractions-container');
+            
+            if (filteredExtractions.length === 0) {
+                container.innerHTML = `
+                    <div class="no-results">
+                        <h3>No extractions found</h3>
+                        <p>Try adjusting your search or filter criteria</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = '';
+            
+            filteredExtractions.forEach(extraction => {
+                const card = createExtractionCard(extraction);
+                container.appendChild(card);
+            });
+        }
+
+        function createExtractionCard(extraction) {
+            const card = document.createElement('div');
+            card.className = 'extraction-card';
+            
+            // Create thumbnail - handle both base64 images and file paths
+            let thumbnailHtml;
+            if (extraction.imageData && extraction.imageData.startsWith('data:')) {
+                // Base64 image from localStorage
+                thumbnailHtml = `<img src="${extraction.imageData}" alt="Extraction thumbnail">`;
+            } else if (extraction.files && extraction.files.image && serverAvailable) {
+                // Image file path - serve through Flask
+                const encodedPath = encodeURIComponent(extraction.files.image);
+                const imageUrl = `http://127.0.0.1:5000/api/extraction-file/${encodedPath}`;
+                thumbnailHtml = `<img src="${imageUrl}" alt="Extraction thumbnail" onerror="this.parentElement.innerHTML='<div class=\\'placeholder\\'>Image not available</div>'">`;
+            } else {
+                // No image available
+                thumbnailHtml = `<div class="placeholder">No preview available</div>`;
+            }
+            
+            // Get OCR preview text
+            const ocrPreview = getOCRPreview(extraction);
+            
+            card.innerHTML = `
+                <div class="extraction-thumbnail">
+                    ${thumbnailHtml}
+                </div>
+                <div class="extraction-title">${extraction.extractionName || 'Untitled'}</div>
+                <div class="extraction-meta">
+                    <span class="meta-tag equipment">${extraction.equipmentType}</span>
+                    <span class="meta-tag type">${extraction.extractionType}</span>
+                    ${extraction.pageNumber ? `<span class="meta-tag">Page ${extraction.pageNumber + 1}</span>` : ''}
+                </div>
+                <div class="extraction-preview">${ocrPreview}</div>
+                <div class="extraction-actions">
+                    <button class="action-btn primary" onclick="viewExtractionDetails('${extraction.id}')">View Details</button>
+                    <button class="action-btn" onclick="downloadExtraction('${extraction.id}')">Download</button>
+                </div>
+            `;
+            
+            // Add click handler to entire card to open details modal
+            card.addEventListener('click', function(e) {
+                // Don't trigger if clicking on action buttons
+                if (!e.target.closest('.action-btn')) {
+                    viewExtractionDetails(extraction.id);
+                }
+            });
+            
+            // Add hover cursor styling
+            card.style.cursor = 'pointer';
+            
+            return card;
+        }
+
+        function getOCRPreview(extraction) {
+            if (extraction.ocrData && extraction.ocrData.rawText) {
+                return extraction.ocrData.rawText.substring(0, 200) + '...';
+            }
+            if (extraction.ocrText) {
+                return extraction.ocrText.substring(0, 200) + '...';
+            }
+            return 'No OCR text available';
+        }
+
+        function tryLoadFromLocalStorage() {
+            try {
+                const stored = localStorage.getItem('pdfExtractions');
+                if (stored) {
+                    const localExtractions = JSON.parse(stored);
+                    if (Array.isArray(localExtractions) && localExtractions.length > 0) {
+                        loadExtractionsData(localExtractions);
+                        updateStatus(`Loaded ${localExtractions.length} extractions from current session`);
+                        return true;
+                    }
+                }
+                updateStatus('No data found in current session');
+                return false;
+            } catch (error) {
+                console.error('Error loading from localStorage:', error);
+                updateStatus('Error loading from current session');
+                return false;
+            }
+        }
+
+        function loadExtractionsData(data) {
+            extractionsData = data;
+            filteredExtractions = [...data];
+            
+            // Hide load data section and show extractions
+            document.getElementById('load-data-section').style.display = 'none';
+            document.getElementById('extractions-container').style.display = viewMode === 'grid' ? 'grid' : 'block';
+            
+            // Update equipment counts
+            renderEquipmentTypes();
+            document.getElementById('total-count').textContent = data.length;
+            
+            // Render extractions
+            filterAndRenderExtractions();
+        }
+
+        function handleFolderLoad(event) {
+            const files = Array.from(event.target.files);
+            updateStatus('Loading folder data...');
+            
+            // Look for project_data.json files
+            const projectFiles = files.filter(file => file.name === 'project_data.json');
+            
+            if (projectFiles.length === 0) {
+                updateStatus('No project_data.json found in selected folder');
+                return;
+            }
+            
+            // Load the first project file found
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const projectData = JSON.parse(e.target.result);
+                    // For folder loading, determine the full base path
+                    let basePath = '';
+                    if (files.length > 0) {
+                        const firstFile = files[0];
+                        // Get the full parent directory path
+                        if (firstFile.webkitRelativePath) {
+                            const pathParts = firstFile.webkitRelativePath.split('/');
+                            if (pathParts.length > 1) {
+                                // Get the folder name only
+                                const folderName = pathParts[0];
+                                
+                                // Try to construct the full path by finding the parent folder
+                                // The file.name should match the folder name
+                                if (firstFile.name === 'project_data.json') {
+                                    // Try to extract full path from the file path
+                                    // This is a workaround since browser file API doesn't give us full paths
+                                    console.log('File webkitRelativePath:', firstFile.webkitRelativePath);
+                                    console.log('File name:', firstFile.name);
+                                    console.log('Folder name from path:', folderName);
+                                    
+                                    // Use folder name for now, but this will need server-side path resolution
+                                    basePath = folderName;
+                                }
+                            }
+                        }
+                    }
+                    
+                    console.log('Using basePath for folder browse:', basePath);
+                    
+                    // For folder browsing, we need to use the server to resolve the full path
+                    // So let's send this to the server first to get proper path resolution
+                    if (basePath) {
+                        handleFolderServerLoad(projectData, basePath);
+                    } else {
+                        const extractions = extractFromProjectData(projectData, basePath);
+                        loadExtractionsData(extractions);
+                        updateStatus(`Loaded ${extractions.length} extractions from folder`);
+                    }
+                } catch (error) {
+                    console.error('Error parsing project data:', error);
+                    updateStatus('Error loading project data');
+                }
+            };
+            reader.readAsText(projectFiles[0]);
+        }
+
+        function handleZipLoad(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            updateStatus('Loading ZIP file...');
+            
+            const reader = new FileReader();
+            reader.onload = async function(e) {
+                try {
+                    const zip = await JSZip.loadAsync(e.target.result);
+                    const projectFile = zip.file('project_data.json');
+                    
+                    if (!projectFile) {
+                        updateStatus('No project_data.json found in ZIP file');
+                        return;
+                    }
+                    
+                    const projectText = await projectFile.async('text');
+                    const projectData = JSON.parse(projectText);
+                    const extractions = extractFromProjectData(projectData, ''); // ZIP files have relative paths
+                    loadExtractionsData(extractions);
+                    updateStatus(`Loaded ${extractions.length} extractions from ZIP`);
+                } catch (error) {
+                    console.error('Error loading ZIP:', error);
+                    updateStatus('Error loading ZIP file');
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function extractFromProjectData(projectData, baseFolderPath = '') {
+            const extractions = [];
+            
+            if (projectData.equipment) {
+                // New format with equipment organization
+                Object.keys(projectData.equipment).forEach(equipmentType => {
+                    projectData.equipment[equipmentType].forEach(item => {
+                        // Convert relative file paths to absolute paths
+                        let files = item.files;
+                        if (files && baseFolderPath) {
+                            files = {};
+                            Object.keys(item.files).forEach(fileType => {
+                                const relativePath = item.files[fileType];
+                                if (relativePath && !relativePath.startsWith('C:') && !relativePath.startsWith('/')) {
+                                    // It's a relative path, make it absolute
+                                    // Use forward slashes consistently for the path separator
+                                    const cleanBasePath = baseFolderPath.replace(/\\/g, '/');
+                                    const cleanRelPath = relativePath.replace(/\\/g, '/');
+                                    files[fileType] = cleanBasePath.endsWith('/') 
+                                        ? cleanBasePath + cleanRelPath
+                                        : cleanBasePath + '/' + cleanRelPath;
+                                } else {
+                                    files[fileType] = relativePath;
+                                }
+                            });
+                        }
+                        
+                        extractions.push({
+                            id: item.id || `${equipmentType}_${Date.now()}_${Math.random()}`,
+                            extractionName: item.extractionName,
+                            equipmentType: item.equipmentType || equipmentType,
+                            extractionType: item.extractionType,
+                            pageNumber: item.pageNumber,
+                            ocrData: item.ocrData,
+                            ocrText: item.ocrData ? item.ocrData.rawText : '',
+                            notes: item.ocrData && item.ocrData.notes ? item.ocrData.notes.entries.join(' ') : '',
+                            files: files
+                        });
+                    });
+                });
+            } else if (Array.isArray(projectData)) {
+                // Legacy format - direct array
+                projectData.forEach(item => {
+                    extractions.push({
+                        id: item.id || `${Date.now()}_${Math.random()}`,
+                        extractionName: item.extractionName || item.name,
+                        equipmentType: item.equipmentType || 'OTHER',
+                        extractionType: item.extractionType || 'other',
+                        pageNumber: item.pageNumber,
+                        ocrData: item.ocrData,
+                        ocrText: item.ocrData ? item.ocrData.rawText : (item.ocrText || ''),
+                        notes: item.notes || '',
+                        files: item.files
+                    });
+                });
+            }
+            
+            return extractions;
+        }
+
+        async function handlePathLoad() {
+            const folderPath = document.getElementById('folder-path-input').value.trim();
+            if (!folderPath) {
+                updateStatus('Please enter a folder path');
+                return;
+            }
+            
+            updateStatus('Loading from folder path...');
+            
+            try {
+                const response = await fetch('http://127.0.0.1:5000/api/browse-extractions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ folder_path: folderPath })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (data.success && data.project_data) {
+                    // Use the server-converted folder path for file resolution
+                    const serverFolderPath = data.folder_path || folderPath;
+                    console.log('Using server folder path:', serverFolderPath);
+                    const extractions = extractFromProjectData(data.project_data, serverFolderPath);
+                    loadExtractionsData(extractions);
+                    updateStatus(`Loaded ${extractions.length} extractions from folder`);
+                } else {
+                    throw new Error(data.error || 'Failed to load project data');
+                }
+            } catch (error) {
+                console.error('Error loading from path:', error);
+                updateStatus(`Error loading folder: ${error.message}`);
+            }
+        }
+
+        async function handleFolderServerLoad(projectData, folderName) {
+            // Try to find the full path by searching for this folder name on the server
+            updateStatus('Resolving folder path...');
+            
+            try {
+                // Use the server's browse-extractions endpoint to find folders with this name
+                const response = await fetch('http://127.0.0.1:5000/api/browse-extractions', {
+                    method: 'GET'
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.extraction_folders) {
+                        // Look for a folder that contains our folder name
+                        const matchingFolder = data.extraction_folders.find(folder => 
+                            folder.name.includes(folderName) || folder.path.includes(folderName)
+                        );
+                        
+                        if (matchingFolder) {
+                            console.log('Found matching folder:', matchingFolder);
+                            // Use the full path from the server
+                            const extractions = extractFromProjectData(projectData, matchingFolder.path);
+                            loadExtractionsData(extractions);
+                            updateStatus(`Loaded ${extractions.length} extractions from folder`);
+                            return;
+                        }
+                    }
+                }
+                
+                // If server search fails, try some common base paths
+                const commonPaths = [
+                    `C:\\Users\\jacob\\Claude\\TEST DOCUMENTS\\${folderName}`,
+                    `/mnt/c/Users/jacob/Claude/TEST DOCUMENTS/${folderName}`,
+                    folderName  // fallback to just the folder name
+                ];
+                
+                let foundPath = null;
+                for (const testPath of commonPaths) {
+                    try {
+                        const testResponse = await fetch('http://127.0.0.1:5000/api/browse-extractions', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ folder_path: testPath })
+                        });
+                        
+                        if (testResponse.ok) {
+                            const testData = await testResponse.json();
+                            if (testData.success) {
+                                foundPath = testData.folder_path || testPath;
+                                break;
+                            }
+                        }
+                    } catch (e) {
+                        // Continue trying other paths
+                    }
+                }
+                
+                if (foundPath) {
+                    console.log('Found working path:', foundPath);
+                    const extractions = extractFromProjectData(projectData, foundPath);
+                    loadExtractionsData(extractions);
+                    updateStatus(`Loaded ${extractions.length} extractions from folder`);
+                } else {
+                    // Fallback: load without full paths (images won't work)
+                    const extractions = extractFromProjectData(projectData, folderName);
+                    loadExtractionsData(extractions);
+                    updateStatus(`Loaded ${extractions.length} extractions (images may not load - use direct path entry)`);
+                }
+                
+            } catch (error) {
+                console.error('Error resolving folder path:', error);
+                // Fallback: load without full paths
+                const extractions = extractFromProjectData(projectData, folderName);
+                loadExtractionsData(extractions);
+                updateStatus(`Loaded ${extractions.length} extractions (path resolution failed)`);
+            }
+        }
+
+        function refreshData() {
+            tryLoadFromLocalStorage();
+        }
+
+        function updateStatus(message) {
+            document.getElementById('status-text').textContent = message;
+            setTimeout(() => {
+                document.getElementById('status-text').textContent = 'Ready';
+            }, 3000);
+        }
+
+        // Modal management
+        function setupModalEventListeners() {
+            const modal = document.getElementById('extraction-modal');
+            const closeButtons = document.querySelectorAll('#close-modal, #close-modal-btn');
+            
+            // Close modal buttons
+            closeButtons.forEach(btn => {
+                btn.addEventListener('click', closeModal);
+            });
+            
+            // Close on outside click
+            modal.addEventListener('click', function(e) {
+                if (e.target === modal) {
+                    closeModal();
+                }
+            });
+            
+            // Tab switching
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const tabName = this.dataset.tab;
+                    switchTab(tabName);
+                });
+            });
+            
+            // Download button
+            document.getElementById('download-extraction-btn').addEventListener('click', function() {
+                const extractionId = this.dataset.extractionId;
+                if (extractionId) {
+                    downloadExtraction(extractionId);
+                }
+            });
+            
+            // SPEC drop zone event listeners (for future implementation)
+            setupSpecDropZone();
+        }
+
+        // SPEC attachment functionality (future enhancement)
+        function setupSpecDropZone() {
+            const dropZone = document.getElementById('spec-drop-zone');
+            const fileInput = document.getElementById('spec-files-input');
+            const browseBtn = document.getElementById('browse-spec-files');
+            
+            // Browse files button
+            browseBtn.addEventListener('click', function() {
+                fileInput.click();
+            });
+            
+            // File input change
+            fileInput.addEventListener('change', function(e) {
+                const files = Array.from(e.target.files);
+                if (files.length > 0) {
+                    handleSpecFiles(files);
+                }
+            });
+            
+            // Drag and drop events
+            dropZone.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.add('drag-over');
+            });
+            
+            dropZone.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.remove('drag-over');
+            });
+            
+            dropZone.addEventListener('drop', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.classList.remove('drag-over');
+                
+                const files = Array.from(e.dataTransfer.files).filter(file => 
+                    file.type === 'application/pdf'
+                );
+                
+                if (files.length > 0) {
+                    handleSpecFiles(files);
+                }
+            });
+        }
+
+        function handleSpecFiles(files) {
+            // This is a placeholder for future SPEC attachment functionality
+            console.log('SPEC files ready for attachment:', files);
+            updateStatus(`Ready to attach ${files.length} SPEC file(s) - Feature coming soon!`);
+            
+            // Future implementation will:
+            // 1. Upload SPEC files to server
+            // 2. Associate them with the current extraction
+            // 3. Update the extraction record
+            // 4. Refresh the files list
+        }
+
+        // Show/hide SPEC drop zone based on user permissions or settings
+        function toggleSpecDropZone(show = false) {
+            const dropZone = document.getElementById('spec-drop-zone');
+            if (dropZone) {
+                dropZone.style.display = show ? 'block' : 'none';
+            }
+        }
+
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+            
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+        }
+
+        function openModal() {
+            document.getElementById('extraction-modal').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal() {
+            document.getElementById('extraction-modal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+
+        // Extraction detail functions
+        function viewExtractionDetails(extractionId) {
+            const extraction = extractionsData.find(ext => ext.id === extractionId);
+            if (!extraction) {
+                updateStatus('Extraction not found');
+                return;
+            }
+            
+            // Populate modal with extraction data
+            populateModal(extraction);
+            openModal();
+        }
+
+        function populateModal(extraction) {
+            // Set title and basic info
+            document.getElementById('modal-extraction-title').textContent = extraction.extractionName || 'Untitled';
+            document.getElementById('modal-equipment-type').textContent = extraction.equipmentType || 'N/A';
+            document.getElementById('modal-extraction-type').textContent = extraction.extractionType || 'N/A';
+            document.getElementById('modal-page-number').textContent = 
+                extraction.pageNumber !== undefined ? `Page ${extraction.pageNumber + 1}` : 'N/A';
+            
+            // Set image - handle both base64 images and file paths
+            const imageEl = document.getElementById('modal-extraction-image');
+            if (extraction.imageData && extraction.imageData.startsWith('data:')) {
+                // Base64 image from localStorage
+                imageEl.src = extraction.imageData;
+                imageEl.style.display = 'block';
+            } else if (extraction.files && extraction.files.image && serverAvailable) {
+                // Image file path - serve through Flask
+                const encodedPath = encodeURIComponent(extraction.files.image);
+                const imageUrl = `http://127.0.0.1:5000/api/extraction-file/${encodedPath}`;
+                imageEl.src = imageUrl;
+                imageEl.style.display = 'block';
+                imageEl.onerror = function() {
+                    this.style.display = 'none';
+                    this.parentElement.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 20px;">Image not available</div>';
+                };
+            } else {
+                imageEl.style.display = 'none';
+            }
+            
+            // Populate OCR text
+            const ocrTextEl = document.getElementById('modal-ocr-text');
+            if (extraction.ocrData && extraction.ocrData.rawText) {
+                ocrTextEl.textContent = extraction.ocrData.rawText;
+            } else if (extraction.ocrText) {
+                ocrTextEl.textContent = extraction.ocrText;
+            } else {
+                ocrTextEl.textContent = 'No OCR text available';
+            }
+            
+            // Populate table data
+            populateTableData(extraction);
+            
+            // Populate notes
+            populateNotes(extraction);
+            
+            // Populate files
+            populateFiles(extraction);
+            
+            // Set extraction ID for download button
+            document.getElementById('download-extraction-btn').dataset.extractionId = extraction.id;
+        }
+
+        function populateTableData(extraction) {
+            const container = document.getElementById('modal-table-data');
+            
+            if (extraction.ocrData && extraction.ocrData.tableData) {
+                try {
+                    const tableData = extraction.ocrData.tableData;
+                    
+                    if (Array.isArray(tableData) && tableData.length > 0) {
+                        // Create table
+                        const table = document.createElement('table');
+                        table.className = 'ocr-table';
+                        
+                        // Create header
+                        const header = tableData[0];
+                        if (typeof header === 'object') {
+                            const thead = document.createElement('thead');
+                            const headerRow = document.createElement('tr');
+                            
+                            Object.keys(header).forEach(key => {
+                                const th = document.createElement('th');
+                                th.textContent = key;
+                                headerRow.appendChild(th);
+                            });
+                            
+                            thead.appendChild(headerRow);
+                            table.appendChild(thead);
+                            
+                            // Create body
+                            const tbody = document.createElement('tbody');
+                            tableData.forEach(row => {
+                                const tr = document.createElement('tr');
+                                Object.values(row).forEach(value => {
+                                    const td = document.createElement('td');
+                                    td.textContent = value || '';
+                                    tr.appendChild(td);
+                                });
+                                tbody.appendChild(tr);
+                            });
+                            
+                            table.appendChild(tbody);
+                            container.innerHTML = '';
+                            container.appendChild(table);
+                        } else {
+                            container.innerHTML = '<pre>' + JSON.stringify(tableData, null, 2) + '</pre>';
+                        }
+                    } else {
+                        container.innerHTML = 'No table data available';
+                    }
+                } catch (error) {
+                    console.error('Error displaying table data:', error);
+                    container.innerHTML = 'Error displaying table data';
+                }
+            } else {
+                container.innerHTML = 'No table data available';
+            }
+        }
+
+        function populateNotes(extraction) {
+            const container = document.getElementById('modal-notes-list');
+            
+            if (extraction.ocrData && extraction.ocrData.notes && extraction.ocrData.notes.entries) {
+                const notes = extraction.ocrData.notes.entries;
+                if (Array.isArray(notes) && notes.length > 0) {
+                    container.innerHTML = '';
+                    notes.forEach(note => {
+                        const noteEl = document.createElement('div');
+                        noteEl.className = 'note-item';
+                        noteEl.textContent = note;
+                        container.appendChild(noteEl);
+                    });
+                } else {
+                    container.innerHTML = 'No installation notes available';
+                }
+            } else if (extraction.notes) {
+                container.innerHTML = `<div class="note-item">${extraction.notes}</div>`;
+            } else {
+                container.innerHTML = 'No installation notes available';
+            }
+        }
+
+        function populateFiles(extraction) {
+            const container = document.getElementById('modal-files-list');
+            
+            if (extraction.files) {
+                container.innerHTML = '';
+                
+                Object.keys(extraction.files).forEach(fileType => {
+                    const filePath = extraction.files[fileType];
+                    if (filePath) {
+                        const fileEl = document.createElement('div');
+                        fileEl.className = 'file-item';
+                        
+                        const fileExt = filePath.split('.').pop().toUpperCase();
+                        const fileIcon = getFileIcon(fileExt);
+                        
+                        fileEl.innerHTML = `
+                            <div class="file-info">
+                                <div class="file-icon">${fileIcon}</div>
+                                <div>
+                                    <div>${fileType}</div>
+                                    <div style="font-size: 0.8em; color: #6c757d;">${filePath.split('/').pop()}</div>
+                                </div>
+                            </div>
+                            <button class="action-btn" onclick="downloadFile('${filePath}', '${fileType}')">Download</button>
+                        `;
+                        
+                        container.appendChild(fileEl);
+                    }
+                });
+                
+                if (container.children.length === 0) {
+                    container.innerHTML = 'No files available';
+                }
+            } else {
+                container.innerHTML = 'No files available';
+            }
+        }
+
+        function getFileIcon(ext) {
+            const icons = {
+                'PNG': '🖼',
+                'JPG': '🖼',
+                'JPEG': '🖼',
+                'JSON': '{}',
+                'TXT': 'T',
+                'PDF': '📄'
+            };
+            return icons[ext] || '📄';
+        }
+
+        function downloadFile(filePath, fileType) {
+            if (serverAvailable) {
+                // Use server to serve the file
+                const encodedPath = encodeURIComponent(filePath);
+                const downloadUrl = `http://127.0.0.1:5000/api/extraction-file/${encodedPath}`;
+                
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = filePath.split('/').pop();
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                updateStatus(`Downloading ${fileType}...`);
+            } else {
+                updateStatus('Server required for file downloads');
+            }
+        }
+
+        function downloadExtraction(extractionId) {
+            const extraction = extractionsData.find(ext => ext.id === extractionId);
+            if (!extraction) {
+                updateStatus('Extraction not found');
+                return;
+            }
+            
+            if (extraction.files && serverAvailable) {
+                // Download all files
+                Object.keys(extraction.files).forEach(fileType => {
+                    const filePath = extraction.files[fileType];
+                    if (filePath) {
+                        setTimeout(() => downloadFile(filePath, fileType), 100);
+                    }
+                });
+                updateStatus(`Downloading all files for ${extraction.extractionName}...`);
+            } else {
+                updateStatus('No files available for download or server offline');
+            }
+        }
+        
+        // Navigate to PDF Viewer while preserving state
+        function navigateToPDFViewer() {
+            console.log('Navigating to PDF Viewer');
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>

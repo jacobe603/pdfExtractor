@@ -1,44 +1,30 @@
 #!/usr/bin/env python3
-"""
-Start both the Flask API server and HTTP server for PDF Extractor
-"""
-
 import subprocess
 import sys
-import time
 import os
 from pathlib import Path
 
-# Change to script directory
 os.chdir(Path(__file__).parent)
 
-print("""
-╔════════════════════════════════════════════════════════════╗
-║        PDF Schedule Extractor - Starting All Services      ║
-╚════════════════════════════════════════════════════════════╝
-""")
+print("Starting servers...")
 
-# Start Flask API server
-print("Starting Flask API server on port 5000...")
-flask_process = subprocess.Popen(
-    [sys.executable, "space_api_server.py"],
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE
-)
+# Use venv Python if available, otherwise use system Python
+venv_python = Path(__file__).parent / "venv" / "bin" / "python"
+python_exe = str(venv_python) if venv_python.exists() else sys.executable
 
-# Give Flask time to start
-time.sleep(2)
+flask_process = subprocess.Popen([python_exe, "space_api_server.py"])
 
-# Start HTTP server
-print("Starting HTTP server on port 8080...")
-print("\n" + "="*60)
-print("  Access the application at: http://localhost:8080")
-print("="*60 + "\n")
+http_process = subprocess.Popen([sys.executable, "-m", "http.server", "8080"])
+
+print("Servers started.")
+print("Access the application at: http://localhost:8080/index.html")
 
 try:
-    subprocess.run([sys.executable, "serve.py"])
+    flask_process.wait()
+    http_process.wait()
 except KeyboardInterrupt:
     print("\nShutting down servers...")
     flask_process.terminate()
+    http_process.terminate()
     print("Servers stopped.")
     sys.exit(0)

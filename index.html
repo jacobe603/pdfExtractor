@@ -610,6 +610,34 @@
             margin-top: 15px;
         }
 
+        /* Context Menu Styles */
+        .context-menu {
+            position: fixed;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            padding: 4px 0;
+            min-width: 200px;
+            z-index: 1000;
+            font-size: 13px;
+        }
+
+        .context-menu-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border-bottom: none;
+        }
+
+        .context-menu-item:hover {
+            background-color: #f0f0f0;
+        }
+
+        .context-menu-item:active {
+            background-color: #e0e0e0;
+        }
+
     </style>
 </head>
 <body>
@@ -635,6 +663,7 @@
             <button class="btn" id="detect-spaces" style="background: #3498db;">🔍 Detect Spaces</button>
             <button class="btn" id="import-all-spaces" style="background: #9b59b6; display: none;">📥 Import All Spaces</button>
             <button class="btn" id="toggle-spaces" style="background: #2ecc71; display: none;">👁️ Hide Spaces</button>
+            <a href="#" onclick="navigateToEquipmentBrowser(); return false;" class="btn" id="equipment-browser" style="background: #8e44ad; text-decoration: none; display: inline-flex; align-items: center;">📋 Equipment Browser</a>
             <button class="btn" id="open-settings" style="background: #95a5a6; margin-left: auto;">⚙️ Settings</button>
             <label style="font-size: 12px; color: #ecf0f1; margin-left: 10px;">
                 <input type="checkbox" id="enable-text-extraction" checked style="margin-right: 5px;">
@@ -719,6 +748,11 @@
 
     <div class="status-bar" style="display: flex; justify-content: space-between; align-items: center;">
         <span id="status-text">Ready</span>
+        <div id="current-pdf-status" style="display: flex; align-items: center; gap: 8px; 
+             padding: 4px 10px; background: rgba(52, 152, 219, 0.1); border-radius: 4px; color: #2c3e50;">
+            <span style="font-size: 12px;">📄</span>
+            <span id="current-pdf-name" style="font-size: 12px; font-weight: 500;">No PDF loaded</span>
+        </div>
         <div id="server-status-inline" style="display: flex; align-items: center; gap: 8px; 
              padding: 4px 10px; background: rgba(0,0,0,0.1); border-radius: 4px;">
             <span id="server-status-icon-inline">🔴</span>
@@ -901,6 +935,12 @@
                         </label>
                     </div>
                 </div>
+                <div style="margin-top: 10px;">
+                    <label>
+                        <input type="checkbox" id="default-include-pdf-versions">
+                        Include PDF versions of extracted images
+                    </label>
+                </div>
             </div>
             
             <!-- API Settings Section -->
@@ -965,6 +1005,7 @@
                         <tr style="background: #f0f0f0; border-bottom: 2px solid #ddd;">
                             <th style="padding: 10px; text-align: left;">Name</th>
                             <th style="padding: 10px; text-align: left; width: 150px;">Equipment Type</th>
+                            <th style="padding: 10px; text-align: left; width: 140px;">Extraction Type</th>
                             <th style="padding: 10px; text-align: center; width: 60px;">Page</th>
                             <th style="padding: 10px; text-align: center; width: 80px;">OCR</th>
                             <th style="padding: 10px; text-align: center; width: 60px;">RFQ</th>
@@ -1013,6 +1054,13 @@
             <div class="modal-buttons">
                 <button class="btn-secondary" id="ocr-modal-close">Close</button>
             </div>
+        </div>
+    </div>
+
+    <!-- Right-Click Context Menu -->
+    <div id="page-context-menu" class="context-menu" style="display: none;">
+        <div class="context-menu-item" id="add-full-page">
+            📄 Add Full Page to Extraction
         </div>
     </div>
 
@@ -1117,9 +1165,14 @@
             setStatus('Detecting BlueBeam Spaces...');
             
             try {
-                // Use the current PDF file if available
-                const pdfFile = pdfInput.files[0];
-                const result = await spaceManager.detectSpaces(pdfFile);
+                // Use the current PDF path if available (server-side), otherwise use the file object
+                const pdfSource = currentPDFPath || currentPDFFile || pdfInput.files[0];
+                
+                if (!pdfSource) {
+                    throw new Error('No PDF loaded');
+                }
+                
+                const result = await spaceManager.detectSpaces(pdfSource);
                 
                 // Update UI
                 const spacesSection = document.getElementById('spaces-section');
@@ -1219,16 +1272,8 @@
             if (currentPage !== pageNum + 1) {
                 currentPage = pageNum + 1;
                 updatePageInfo();
-                renderPage(currentPage).then(() => {
-                    // Re-render spaces after page change
-                    if (spaceManager && spaceManager.getAllSpaces().length > 0) {
-                        const pageInfo = spaceManager.pageInfo[pageNum];
-                        const pageHeight = pageInfo?.height || 792;
-                        const pageWidth = pageInfo?.width || 612;
-                        const rotation = pageInfo?.rotation || 0;
-                        spaceManager.renderSpacesForPage(pageNum, currentZoom, pageHeight, pageWidth, rotation);
-                    }
-                });
+                renderDebounce(currentPage);
+                // Note: spaces will be re-rendered as part of renderPage
             }
         }
         
@@ -1664,6 +1709,7 @@
             // Set other defaults
             document.getElementById('default-ocr-provider').value = settings.defaultSettings.ocrProvider;
             document.getElementById('default-auto-ocr').checked = settings.defaultSettings.autoRunOCR;
+            document.getElementById('default-include-pdf-versions').checked = settings.defaultSettings.includePDFVersions;
             
             // Set API key
             const apiKey = localStorage.getItem('gemini-api-key') || '';
@@ -1719,7 +1765,8 @@
                 defaultEquipmentType: document.getElementById('default-equipment-type').value,
                 defaultExtractionType: document.getElementById('default-extraction-type').value,
                 ocrProvider: document.getElementById('default-ocr-provider').value,
-                autoRunOCR: document.getElementById('default-auto-ocr').checked
+                autoRunOCR: document.getElementById('default-auto-ocr').checked,
+                includePDFVersions: document.getElementById('default-include-pdf-versions').checked
             };
             
             window.settingsManager.saveUserSettings({ defaultSettings });
@@ -1823,7 +1870,11 @@
         });
 
         function setupEventListeners() {
-            pdfInput.addEventListener('change', handleFileSelect);
+            if (pdfInput) {
+                pdfInput.addEventListener('change', handleFileSelect);
+            } else {
+                console.error('PDF input element not found!');
+            }
             canvas.addEventListener('mousedown', startSelection);
             canvas.addEventListener('mousemove', updateSelection);
             canvas.addEventListener('mouseup', endSelection);
@@ -1858,6 +1909,20 @@
             
             // Mouse wheel zoom
             canvas.addEventListener('wheel', handleMouseWheel, { passive: false });
+            
+            // Right-click context menu
+            canvas.addEventListener('contextmenu', handleContextMenu);
+            
+            // Hide context menu when clicking elsewhere
+            document.addEventListener('click', hideContextMenu);
+            document.addEventListener('contextmenu', function(e) {
+                if (!canvas.contains(e.target)) {
+                    hideContextMenu();
+                }
+            });
+            
+            // Context menu item click handler
+            document.getElementById('add-full-page').addEventListener('click', addFullPageToExtraction);
             
             // BlueBeam Spaces buttons
             document.getElementById('detect-spaces').addEventListener('click', detectBlueBeamSpaces);
@@ -1938,6 +2003,9 @@
 
             // Store file reference for session management
             currentPDFFile = file;
+            
+            // Update status bar with filename
+            updateCurrentPDFStatus(file.name);
             
             // Try to auto-detect file path
             await tryAutoDetectPath(file);
@@ -2060,9 +2128,13 @@
             // Cancel any existing render operation
             if (currentRenderOperation) {
                 try {
-                    await currentRenderOperation._transport.destroy();
+                    if (currentRenderOperation.cancel) {
+                        currentRenderOperation.cancel();
+                    }
+                    currentRenderOperation = null;
                 } catch (error) {
                     // Ignore cancellation errors
+                    console.log('Render cancellation:', error.message);
                 }
             }
 
@@ -2098,7 +2170,9 @@
                 console.time(`Page ${pageNum} PDF Render`);
                 // Store current render operation
                 currentRenderOperation = page.render(renderContext);
-                await currentRenderOperation.promise;
+                if (currentRenderOperation && currentRenderOperation.promise) {
+                    await currentRenderOperation.promise;
+                }
                 currentRenderOperation = null;
                 console.timeEnd(`Page ${pageNum} PDF Render`);
                 setStatus(`Page ${pageNum} rendered.`);
@@ -2129,11 +2203,16 @@
                 setStatus(`Page ${pageNum} rendered. Click and drag to select schedule areas.`);
                 
             } catch (error) {
-                if (error.name !== 'RenderingCancelledException') {
+                // Clear current operation on any error
+                currentRenderOperation = null;
+                
+                if (error.name === 'RenderingCancelledException' || error.message.includes('cancelled')) {
+                    console.log('Render operation cancelled for page', pageNum);
+                    return; // Don't show error for cancelled operations
+                } else {
                     console.error('Error rendering page:', error);
                     setStatus('Error rendering page');
                 }
-                currentRenderOperation = null;
             }
         }
 
@@ -2214,6 +2293,153 @@
             }
         }
 
+        function handleContextMenu(event) {
+            // Only show context menu if we have a PDF loaded and not currently selecting
+            if (!currentPDF || isSelecting) {
+                return;
+            }
+            
+            event.preventDefault();
+            
+            const contextMenu = document.getElementById('page-context-menu');
+            
+            // Position the menu at the mouse cursor
+            contextMenu.style.left = event.pageX + 'px';
+            contextMenu.style.top = event.pageY + 'px';
+            contextMenu.style.display = 'block';
+            
+            // Store the click position for potential use
+            contextMenu.dataset.pageX = event.pageX;
+            contextMenu.dataset.pageY = event.pageY;
+        }
+
+        function hideContextMenu() {
+            const contextMenu = document.getElementById('page-context-menu');
+            if (contextMenu) {
+                contextMenu.style.display = 'none';
+            }
+        }
+
+        function addFullPageToExtraction() {
+            // Hide the context menu
+            hideContextMenu();
+            
+            // Only proceed if we have a PDF loaded
+            if (!currentPDF) {
+                alert('No PDF loaded');
+                return;
+            }
+            
+            // Create a full page extraction object
+            const fullPageExtraction = {
+                id: generateExtractionUID(),
+                legacyId: ++extractionCounter, // Keep legacy counter for compatibility
+                extractionName: `Page ${currentPage} Full Page`,
+                equipmentType: 'OTHER',
+                extractionType: 'drawing', 
+                description: `Full page extraction from page ${currentPage}`,
+                rfqRequired: false,
+                coordinates: {
+                    page: currentPage,
+                    isFullPage: true
+                },
+                isFullPage: true,
+                timestamp: new Date().toISOString(),
+                ocrData: null, // No OCR needed for full pages
+                ocrStatus: 'none',
+                imageData: null // No image data needed
+            };
+            
+            // Add to extractions array
+            extractions.push(fullPageExtraction);
+            
+            // Set this as the current extraction for editing
+            currentSelection = fullPageExtraction.coordinates;
+            
+            // Open the modal for editing
+            openModalForFullPage(fullPageExtraction);
+            
+            // Update the UI
+            updateExtractionList();
+            saveToLocalStorage();
+        }
+
+        function openModalForFullPage(extraction) {
+            const modal = document.getElementById('schedule-modal');
+            const modalTitle = document.querySelector('#schedule-modal h3');
+            
+            if (modalTitle) {
+                modalTitle.textContent = 'Full Page Extraction';
+            }
+            
+            // Set editing mode
+            editingExtractionId = extraction.id;
+            
+            // Populate the form with extraction data
+            document.getElementById('extraction-name').value = extraction.extractionName;
+            document.getElementById('extraction-type').value = extraction.extractionType;
+            document.getElementById('extraction-description').value = extraction.description || '';
+            document.getElementById('rfq-required').checked = extraction.rfqRequired || false;
+            
+            // Handle equipment type (including custom types)
+            const equipmentTypeSelect = document.getElementById('equipment-type');
+            const customEquipmentGroup = document.getElementById('custom-equipment-group');
+            const customEquipmentInput = document.getElementById('custom-equipment-type');
+            
+            // Check if the equipment type is in the standard list
+            const isStandardType = Array.from(equipmentTypeSelect.options).some(option => option.value === extraction.equipmentType);
+            
+            if (isStandardType) {
+                equipmentTypeSelect.value = extraction.equipmentType;
+                customEquipmentGroup.style.display = 'none';
+            } else {
+                // It's a custom equipment type
+                equipmentTypeSelect.value = 'CUSTOM';
+                customEquipmentInput.value = extraction.equipmentType;
+                customEquipmentGroup.style.display = 'block';
+            }
+            
+            // Hide OCR-related elements for full page extractions
+            const ocrSection = document.getElementById('ocr-section');
+            const tableOcrToggle = document.getElementById('enable-table-ocr');
+            const ocrControls = document.querySelector('.ocr-controls');
+            
+            if (ocrSection) ocrSection.style.display = 'none';
+            if (tableOcrToggle) tableOcrToggle.parentElement.style.display = 'none';
+            if (ocrControls) ocrControls.style.display = 'none';
+            
+            // Show a note about full page extraction
+            let fullPageNote = document.getElementById('full-page-note');
+            if (!fullPageNote) {
+                fullPageNote = document.createElement('div');
+                fullPageNote.id = 'full-page-note';
+                fullPageNote.style.cssText = 'background: #e3f2fd; border: 1px solid #2196f3; border-radius: 4px; padding: 10px; margin: 10px 0; color: #1976d2;';
+                fullPageNote.innerHTML = '📄 <strong>Full Page Extraction</strong><br>This will include the entire PDF page with perfect quality and scalability in the consolidated PDF.';
+                
+                // Insert after the description field
+                const descField = document.getElementById('extraction-description');
+                if (descField && descField.parentElement) {
+                    const container = descField.parentElement;
+                    container.parentNode.insertBefore(fullPageNote, container.nextSibling);
+                } else {
+                    // Fallback: append to modal content if description field not found
+                    const modalContent = modal.querySelector('.modal-content');
+                    if (modalContent) {
+                        modalContent.appendChild(fullPageNote);
+                    }
+                }
+            } else {
+                fullPageNote.style.display = 'block';
+            }
+            
+            // Store the extraction ID for saving
+            modal.dataset.extractionId = extraction.id;
+            modal.dataset.isFullPage = 'true';
+            
+            // Show the modal
+            modal.style.display = 'block';
+        }
+
         function changePage(direction) {
             const newPage = currentPage + direction;
             if (newPage >= 1 && newPage <= totalPages) {
@@ -2222,6 +2448,7 @@
                 // Clear overlays before changing pages
                 clearSavedOverlay();
                 clearTempOverlay();
+                // Use direct rendering for page changes
                 renderPage(currentPage);
             }
         }
@@ -2858,6 +3085,20 @@
             currentOCRResult = null; // Clear stored OCR result
             editingExtractionId = null; // Clear editing mode
             
+            // Reset full page modal state
+            modal.dataset.isFullPage = 'false';
+            
+            // Show OCR elements again for regular extractions
+            const ocrSection = document.getElementById('ocr-section');
+            const tableOcrToggle = document.getElementById('enable-table-ocr');
+            const ocrControls = document.querySelector('.ocr-controls');
+            const fullPageNote = document.getElementById('full-page-note');
+            
+            if (ocrSection) ocrSection.style.display = '';
+            if (tableOcrToggle) tableOcrToggle.parentElement.style.display = '';
+            if (ocrControls) ocrControls.style.display = '';
+            if (fullPageNote) fullPageNote.style.display = 'none';
+            
             // Initialize search text state
             initializeSearchText();
             
@@ -2937,20 +3178,48 @@
                 return;
             }
             
-            // Ensure selection has required properties
-            if (!currentSelection.page || typeof currentSelection.x !== 'number') {
-                alert('Invalid selection coordinates');
-                console.error('Invalid currentSelection:', currentSelection);
-                return;
+            // Check if this is a full page extraction
+            const modal = document.getElementById('schedule-modal');
+            const isFullPageExtraction = modal.dataset.isFullPage === 'true';
+            
+            // Validate selection based on type
+            if (isFullPageExtraction) {
+                // Full page extractions only need page number
+                if (!currentSelection.page || !currentSelection.isFullPage) {
+                    alert('Invalid full page selection');
+                    console.error('Invalid full page selection:', currentSelection);
+                    return;
+                }
+            } else {
+                // Regular extractions need x, y coordinates
+                if (!currentSelection.page || typeof currentSelection.x !== 'number') {
+                    alert('Invalid selection coordinates');
+                    console.error('Invalid currentSelection:', currentSelection);
+                    return;
+                }
             }
             
-            // Show loading message
-            setStatus('Extracting high-resolution image...');
+            let imageData = null;
             
-            try {
-                // Extract image from PDF at high resolution
-                const imageData = await extractImageFromSelection(currentSelection);
+            if (isFullPageExtraction) {
+                // Full page extractions don't need image extraction
+                setStatus('Processing full page extraction...');
+                console.log('Full page extraction - skipping image extraction');
+            } else {
+                // Show loading message for regular extractions
+                setStatus('Extracting high-resolution image...');
                 
+                try {
+                    // Extract image from PDF at high resolution
+                    imageData = await extractImageFromSelection(currentSelection);
+                } catch (error) {
+                    console.error('Error extracting image:', error);
+                    setStatus('Error extracting image. Please try again.');
+                    return;
+                }
+            }
+                
+                try {
                 // Use OCR data from modal if available
                 const ocrData = currentOCRResult;
 
@@ -2974,6 +3243,7 @@
                             ocrData: ocrData !== null ? ocrData : existing.ocrData, // Use new OCR if provided, otherwise keep existing
                             ocrStatus: ocrData ? 'completed' : (existing.ocrData ? 'completed' : 'none'),
                             lastModified: new Date().toISOString(),
+                            isFullPage: isFullPageExtraction, // Add full page flag
                             // Preserve space reference if it exists
                             ...(existing.spaceXref && { 
                                 isBlueBeamSpace: existing.isBlueBeamSpace,
@@ -3001,6 +3271,7 @@
                         ocrData: ocrData,
                         ocrStatus: ocrData ? 'completed' : 'none',
                         timestamp: new Date().toISOString(),
+                        isFullPage: isFullPageExtraction, // Add full page flag
                         // Add space reference if this was converted from a BlueBeam space
                         ...(currentSelection.spaceXref && { 
                             isBlueBeamSpace: true,
@@ -3067,6 +3338,13 @@
                 };
                 await page.render(renderContext).promise;
                 
+                // Check if this is a full page extraction
+                if (selection.isFullPage) {
+                    // For full page extractions, just return the entire canvas
+                    console.log('Full page extraction - returning entire page');
+                    return tempCanvas.toDataURL('image/png');
+                }
+                
                 // COORDINATE SYSTEM EXPLANATION:
                 // selection.x/y/width/height are normalized to PDF scale (1.0)
                 // To map to extraction scale (3.0), we multiply by 3.0
@@ -3086,11 +3364,11 @@
                     canvasSize: { width: tempCanvas.width, height: tempCanvas.height }
                 });
                 
-                // Ensure coordinates are within bounds
-                const boundedX = Math.max(0, Math.min(extractX, tempCanvas.width));
-                const boundedY = Math.max(0, Math.min(extractY, tempCanvas.height));
-                const boundedWidth = Math.min(extractWidth, tempCanvas.width - boundedX);
-                const boundedHeight = Math.min(extractHeight, tempCanvas.height - boundedY);
+                // Ensure coordinates are within bounds and are integers
+                const boundedX = Math.max(0, Math.min(Math.round(extractX), tempCanvas.width));
+                const boundedY = Math.max(0, Math.min(Math.round(extractY), tempCanvas.height));
+                const boundedWidth = Math.min(Math.round(extractWidth), tempCanvas.width - boundedX);
+                const boundedHeight = Math.min(Math.round(extractHeight), tempCanvas.height - boundedY);
                 
                 if (boundedWidth <= 0 || boundedHeight <= 0) {
                     console.error('Invalid extraction bounds:', { boundedX, boundedY, boundedWidth, boundedHeight });
@@ -3122,12 +3400,28 @@
             const tempCanvas = document.createElement('canvas');
             const tempCtx = tempCanvas.getContext('2d');
             
+            // Check if this is a full page extraction
+            if (selection.isFullPage) {
+                // For full page extractions, just return the entire current canvas
+                console.log('Full page extraction fallback - returning entire canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                tempCtx.drawImage(canvas, 0, 0);
+                return tempCanvas.toDataURL('image/png');
+            }
+            
             const scaledCoords = scaleCoordinates(selection, currentZoom);
             
-            tempCanvas.width = scaledCoords.width;
-            tempCanvas.height = scaledCoords.height;
+            // Ensure all values are integers for getImageData
+            const x = Math.round(scaledCoords.x);
+            const y = Math.round(scaledCoords.y);
+            const width = Math.round(scaledCoords.width);
+            const height = Math.round(scaledCoords.height);
             
-            const imageData = ctx.getImageData(scaledCoords.x, scaledCoords.y, scaledCoords.width, scaledCoords.height);
+            tempCanvas.width = width;
+            tempCanvas.height = height;
+            
+            const imageData = ctx.getImageData(x, y, width, height);
             tempCtx.putImageData(imageData, 0, 0);
             
             return tempCanvas.toDataURL('image/png');
@@ -3396,8 +3690,9 @@
             
             if (!modal || !tbody) return;
             
-            // Get equipment types from settings
+            // Get equipment types and extraction types from settings
             const equipmentTypes = getEquipmentTypesFromSettings();
+            const extractionTypes = getExtractionTypesFromSettings();
             
             // Clear and populate table
             tbody.innerHTML = '';
@@ -3408,19 +3703,40 @@
                 row.dataset.extractionId = extraction.id;
                 
                 // Build equipment type options
-                const equipmentOptions = equipmentTypes
-                    .filter(type => type.value !== 'CUSTOM') // Skip CUSTOM option
+                let equipmentOptions = equipmentTypes
+                    .filter(type => type.value !== 'CUSTOM') // Skip CUSTOM option initially
                     .map(type => {
                         const selected = extraction.equipmentType === type.value ? 'selected' : '';
                         return `<option value="${type.value}" ${selected}>${type.label || type.value}</option>`;
                     })
                     .join('');
                 
+                // If extraction uses a custom equipment type not in the standard list, add it
+                const isStandardType = equipmentTypes.some(type => type.value === extraction.equipmentType);
+                if (!isStandardType && extraction.equipmentType) {
+                    equipmentOptions += `<option value="${extraction.equipmentType}" selected>${extraction.equipmentType}</option>`;
+                }
+                
+                // Build extraction type options
+                const extractionOptions = extractionTypes
+                    .map(type => {
+                        const selected = extraction.extractionType === type.value ? 'selected' : '';
+                        return `<option value="${type.value}" ${selected}>${type.label || type.value}</option>`;
+                    })
+                    .join('');
+                
+                const fullPageIcon = extraction.isFullPage ? '📄 ' : '';
+                
                 row.innerHTML = `
-                    <td style="padding: 8px;">${extraction.extractionName || extraction.name}</td>
+                    <td style="padding: 8px;">${fullPageIcon}${extraction.extractionName || extraction.name}</td>
                     <td style="padding: 8px;">
                         <select class="equipment-type-select" data-extraction-id="${extraction.id}" style="width: 100%; padding: 4px;">
                             ${equipmentOptions}
+                        </select>
+                    </td>
+                    <td style="padding: 8px;">
+                        <select class="extraction-type-select" data-extraction-id="${extraction.id}" style="width: 100%; padding: 4px;">
+                            ${extractionOptions}
                         </select>
                     </td>
                     <td style="padding: 8px; text-align: center;">${extraction.coordinates?.page || '?'}</td>
@@ -3442,10 +3758,12 @@
         }
         
         function saveManageAllChanges() {
-            const selects = document.querySelectorAll('.equipment-type-select');
+            const equipmentSelects = document.querySelectorAll('.equipment-type-select');
+            const extractionSelects = document.querySelectorAll('.extraction-type-select');
             let changeCount = 0;
             
-            selects.forEach(select => {
+            // Handle equipment type changes
+            equipmentSelects.forEach(select => {
                 const extractionId = select.dataset.extractionId;
                 const newType = select.value;
                 const extraction = extractions.find(e => e.id === extractionId);
@@ -3453,6 +3771,18 @@
                 if (extraction && extraction.equipmentType !== newType) {
                     extraction.equipmentType = newType;
                     if (extraction.type) delete extraction.type;
+                    changeCount++;
+                }
+            });
+            
+            // Handle extraction type changes
+            extractionSelects.forEach(select => {
+                const extractionId = select.dataset.extractionId;
+                const newType = select.value;
+                const extraction = extractions.find(e => e.id === extractionId);
+                
+                if (extraction && extraction.extractionType !== newType) {
+                    extraction.extractionType = newType;
                     changeCount++;
                 }
             });
@@ -3488,6 +3818,22 @@
                 { value: 'GRD', label: 'GRD (Grilles/Diffusers)' },
                 { value: 'DUCTING', label: 'DUCTING (Ductwork)' },
                 { value: 'OTHER', label: 'OTHER' }
+            ];
+        }
+        
+        function getExtractionTypesFromSettings() {
+            const settings = window.settingsManager ? window.settingsManager.getSettings() : null;
+            if (settings && settings.extractionTypes) {
+                return settings.extractionTypes;
+            }
+            // Fallback if settings not loaded
+            return [
+                { value: 'schedule', label: 'Schedule' },
+                { value: 'drawing', label: 'Drawing' },
+                { value: 'table', label: 'Table' },
+                { value: 'detail', label: 'Detail' },
+                { value: 'specification', label: 'Specification' },
+                { value: 'other', label: 'Other' }
             ];
         }
         
@@ -3658,15 +4004,17 @@
                     const hasOCRResults = extraction.ocrData && extraction.ocrData.success;
                     const ocrContent = hasOCRResults ? formatOCRResultsForDisplay(extraction) : '';
                     
+                    const fullPageIcon = extraction.isFullPage ? '📄 ' : '';
+                    
                     item.innerHTML = `
                         <div class="extraction-title">
-                            ${extractionTypeIcon} ${extraction.extractionName || extraction.name}
+                            ${fullPageIcon}${extractionTypeIcon} ${extraction.extractionName || extraction.name}
                             <span style="float: right;">
                                 ${rfqIcon}${rfqIcon ? ' ' : ''}${ocrStatusIcon}
                             </span>
                         </div>
                         <div class="extraction-coords">
-                            Page ${extraction.coordinates?.page || 'Unknown'} • ${extraction.equipmentType || extraction.type || 'UNKNOWN'}
+                            Page ${extraction.coordinates?.page || 'Unknown'}${extraction.isFullPage ? ' (Full Page)' : ''} • ${extraction.equipmentType || extraction.type || 'UNKNOWN'}
                             ${extraction.description || extraction.notes ? ` • ${extraction.description || extraction.notes}` : ''}
                         </div>
                         <div style="margin-top: 5px;">
@@ -3722,9 +4070,8 @@
             if (extraction.coordinates && currentPage !== extraction.coordinates.page) {
                 currentPage = extraction.coordinates.page;
                 updatePageInfo();
-                renderPage(currentPage).then(() => {
-                    showExtractionHighlight(extraction);
-                });
+                renderDebounce(currentPage);
+                // Note: highlight will show when render completes
             } else {
                 showExtractionHighlight(extraction);
             }
@@ -3858,10 +4205,8 @@
             // Navigate to the correct page if needed
             if (extraction.coordinates && currentPage !== extraction.coordinates.page) {
                 currentPage = extraction.coordinates.page;
-                renderPage(currentPage).then(() => {
-                    // Continue with opening the modal after page is rendered
-                    openEditModal(extraction);
-                });
+                renderDebounce(currentPage);
+                // Note: modal will open when render completes
             } else {
                 openEditModal(extraction);
             }
@@ -4584,6 +4929,7 @@
                 const mainData = {
                     project: document.title || 'PDF Schedule Extractions',
                     exportDate: new Date().toISOString(),
+                    originalPdfPath: currentPDFPath || null,
                     totalExtractions: extractions.length,
                     equipmentTypes: Object.keys(equipmentGroups),
                     equipment: {}
@@ -4612,6 +4958,7 @@
                             extractionType: extraction.extractionType,
                             description: extraction.description,
                             coordinates: extraction.coordinates,
+                            isFullPage: extraction.isFullPage || false,
                             ocrData: extraction.ocrData,
                             files: {
                                 image: `${equipmentType}/${baseFileName}.png`,
@@ -5165,7 +5512,7 @@
                 const fileName = path.split(/[/\\]/).pop();
                 setStatus(`Loading ${fileName} from recent files...`);
                 
-                const response = await fetch('http://localhost:5000/api/load-pdf', {
+                const response = await fetch(`${SERVER_URL}/api/load-pdf`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ path: path })
@@ -5177,6 +5524,9 @@
                     
                     // Set the path before loading
                     currentPDFPath = path;
+                    
+                    // Update status bar
+                    updateCurrentPDFStatus(fileName);
                     
                     // Create a data transfer to simulate file input
                     const dataTransfer = new DataTransfer();
@@ -5235,7 +5585,7 @@
                 
                 // Try to find file on server
                 setStatus('Searching for file path...');
-                const response = await fetch('http://localhost:5000/api/find-file', {
+                const response = await fetch(`${SERVER_URL}/api/find-file`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -5283,6 +5633,26 @@
                 modal.innerHTML = `
                     <div class="modal-content" style="width: 80%; max-width: 800px;">
                         <h3>Browse for PDF File</h3>
+                        <div style="margin-bottom: 10px;">
+                            <strong>Quick Locations:</strong><br>
+                            <div style="display: flex; gap: 8px; margin-top: 5px; flex-wrap: wrap;">
+                                <button onclick="browsePath('')" style="padding: 4px 8px; font-size: 12px;">🏠 Home</button>
+                                <button onclick="browsePath('/mnt/c/Users')" style="padding: 4px 8px; font-size: 12px;">👤 Users</button>
+                                <button onclick="browsePath('/mnt/c')" style="padding: 4px 8px; font-size: 12px;">💾 C: Drive</button>
+                                <button onclick="browsePath('/mnt/s')" style="padding: 4px 8px; font-size: 12px;">🌐 S: Network Drive</button>
+                                <button onclick="browsePath('/mnt/s/Projects')" style="padding: 4px 8px; font-size: 12px;">📁 Projects</button>
+                            </div>
+                        </div>
+                        <div style="margin-bottom: 10px; padding: 8px; background: #f9f9f9; border-radius: 4px;">
+                            <strong>Quick Project Search:</strong><br>
+                            <div style="display: flex; gap: 8px; margin-top: 5px; align-items: center;">
+                                <input type="text" id="project-search-input" placeholder="Enter project number (e.g. 1177)" 
+                                       onkeypress="if(event.key==='Enter') searchProjectFolder()" 
+                                       style="padding: 4px 8px; border: 1px solid #ccc; border-radius: 3px; width: 150px;">
+                                <button onclick="searchProjectFolder()" style="padding: 4px 12px; background: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">🔍 Find</button>
+                            </div>
+                            <small style="color: #666; margin-top: 2px; display: block;">Searches in Projects folder for folders starting with the entered number</small>
+                        </div>
                         <div id="file-browser-path" style="padding: 10px; background: #f5f5f5; margin-bottom: 10px;">
                             Current: <span id="current-path">Loading...</span>
                         </div>
@@ -5301,10 +5671,56 @@
             await browsePath('');
         }
         
+        // Search for project folder by number
+        async function searchProjectFolder() {
+            const searchInput = document.getElementById('project-search-input');
+            const projectNumber = searchInput.value.trim();
+            
+            if (!projectNumber) {
+                alert('Please enter a project number to search for');
+                return;
+            }
+            
+            try {
+                // First browse the Projects folder to get the list of folders
+                const response = await fetch(`${SERVER_URL}/api/browse?path=${encodeURIComponent('/mnt/s/Projects')}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Find folders that start with the project number
+                    const matchingFolders = data.folders.filter(folder => 
+                        folder.name.startsWith(projectNumber)
+                    );
+                    
+                    if (matchingFolders.length === 0) {
+                        alert(`No project folders found starting with "${projectNumber}"`);
+                        return;
+                    }
+                    
+                    if (matchingFolders.length === 1) {
+                        // Exact match, navigate to it
+                        const projectPath = `/mnt/s/Projects/${matchingFolders[0].name}`;
+                        await browsePath(projectPath);
+                    } else {
+                        // Multiple matches, show them to user
+                        const folderNames = matchingFolders.map(f => f.name).join('\\n');
+                        const message = `Found ${matchingFolders.length} matching folders:\\n${folderNames}\\n\\nNavigating to Projects folder to show all matches.`;
+                        alert(message);
+                        await browsePath('/mnt/s/Projects');
+                    }
+                } else {
+                    alert('Could not access Projects folder. Make sure the S: drive is mounted.');
+                }
+            } catch (error) {
+                console.error('Project search error:', error);
+                alert('Error searching for project folder: ' + error.message);
+            }
+        }
+        
         // Browse specific path
         async function browsePath(path) {
             try {
-                const response = await fetch(`http://localhost:5000/api/browse?path=${encodeURIComponent(path)}`);
+                const response = await fetch(`${SERVER_URL}/api/browse?path=${encodeURIComponent(path)}`);
                 if (response.ok) {
                     const data = await response.json();
                     updateFileBrowserContent(data);
@@ -5365,7 +5781,10 @@
             try {
                 setStatus(`Loading ${fileName}...`);
                 
-                const response = await fetch('http://localhost:5000/api/load-pdf', {
+                // Update status bar
+                updateCurrentPDFStatus(fileName);
+                
+                const response = await fetch(`${SERVER_URL}/api/load-pdf`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ path: path })
@@ -5402,14 +5821,41 @@
         // SERVER DETECTION AND HYBRID SESSION MANAGEMENT
         // ============================================================
         
+        // Determine the correct server URL based on environment
+        function getServerUrl() {
+            // Try different possible server locations
+            const possibleHosts = [
+                'localhost',           // Standard localhost
+                '127.0.0.1',          // IPv4 loopback
+                window.location.hostname  // Same host as the page
+            ];
+            
+            // If accessed from Windows browser to WSL, we need the WSL IP
+            // This will be the same as window.location.hostname when accessed correctly
+            return `http://${window.location.hostname}:5000`;
+        }
+        
+        const SERVER_URL = getServerUrl();
+        
         // Check if Flask server is available
         async function checkServerStatus() {
             try {
-                const response = await fetch('http://localhost:5000/api/health', {
+                const url = `${SERVER_URL}/api/health`;
+                
+                // Create timeout promise
+                const timeout = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error('Request timeout')), 3000)
+                );
+                
+                // Create fetch promise
+                const fetchPromise = fetch(url, {
                     method: 'GET',
                     mode: 'cors',
                     cache: 'no-cache'
                 });
+                
+                // Race between fetch and timeout
+                const response = await Promise.race([fetchPromise, timeout]);
                 
                 if (response.ok) {
                     const data = await response.json();
@@ -5418,12 +5864,28 @@
                     serverAvailable = false;
                 }
             } catch (error) {
-                console.log('Server not available:', error.message);
+                console.error('Server not available:', error.message);
                 serverAvailable = false;
             }
             
             updateServerStatusUI(serverAvailable);
             return serverAvailable;
+        }
+        
+        // Update current PDF name in status bar
+        function updateCurrentPDFStatus(fileName = null) {
+            const pdfNameElement = document.getElementById('current-pdf-name');
+            if (pdfNameElement) {
+                if (fileName) {
+                    // Extract just the filename without path
+                    const displayName = fileName.split(/[/\\]/).pop();
+                    pdfNameElement.textContent = displayName;
+                    pdfNameElement.title = fileName; // Show full path on hover
+                } else {
+                    pdfNameElement.textContent = 'No PDF loaded';
+                    pdfNameElement.title = '';
+                }
+            }
         }
         
         // Update UI to show server status
@@ -5466,7 +5928,7 @@
             // Try server save first if available and we have a path
             if (serverAvailable && currentPDFPath) {
                 try {
-                    const response = await fetch('http://localhost:5000/api/session/save', {
+                    const response = await fetch(`${SERVER_URL}/api/session/save`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
@@ -5537,7 +5999,7 @@
             if (serverAvailable && currentPDFPath) {
                 try {
                     const response = await fetch(
-                        `http://localhost:5000/api/session/load?pdf_path=${encodeURIComponent(currentPDFPath)}`
+                        `${SERVER_URL}/api/session/load?pdf_path=${encodeURIComponent(currentPDFPath)}`
                     );
                     
                     if (response.ok) {
@@ -5667,6 +6129,7 @@
                     project: document.getElementById('project-name')?.value || 'Construction Project',
                     exportDate: new Date().toISOString(),
                     pdfFile: currentPDFFile?.name || 'unknown.pdf',
+                    originalPdfPath: currentPDFPath || null,
                     totalExtractions: extractions.length,
                     equipmentTypes: Object.keys(equipmentGroups),
                     equipment: {}
@@ -5690,6 +6153,7 @@
                             equipmentType: extraction.equipmentType,
                             description: extraction.description,
                             coordinates: extraction.coordinates,
+                            isFullPage: extraction.isFullPage || false,
                             ocrData: extraction.ocrData,
                             files: {
                                 image: `${equipmentType}/${baseFileName}.png`,
@@ -5733,12 +6197,17 @@
                     
                     try {
                         console.log('Exporting to PDF folder with path:', currentPDFPath);
-                        const response = await fetch('http://localhost:5000/api/export/local', {
+                        // Get PDF generation setting from settings manager
+                        const settings = window.settingsManager ? window.settingsManager.getSettings() : null;
+                        const includePDFs = settings ? settings.defaultSettings.includePDFVersions : true; // Default to true if no settings
+                        
+                        const response = await fetch(`${SERVER_URL}/api/export/local`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 pdf_path: currentPDFPath,
-                                zip_data: base64data
+                                zip_data: base64data,
+                                include_pdfs: includePDFs
                             })
                         });
                         
@@ -6182,6 +6651,187 @@
                 }
             }
         });
+
+        // ============================================================
+        // PDF STATE PERSISTENCE FOR NAVIGATION
+        // ============================================================
+        
+        // Save current PDF state when navigating away
+        function savePDFState() {
+            console.log('savePDFState called - currentPDF:', !!currentPDF, 'currentPDFFile:', !!currentPDFFile);
+            
+            if (currentPDF && currentPDFFile) {
+                const pdfState = {
+                    fileName: currentPDFFile.name,
+                    fileSize: currentPDFFile.size,
+                    currentPage: currentPage,
+                    totalPages: totalPages,
+                    currentZoom: currentZoom,
+                    currentZoomIndex: currentZoomIndex,
+                    pdfPath: currentPDFPath,
+                    extractionCount: extractions.length,
+                    savedAt: Date.now()
+                };
+                
+                localStorage.setItem('pdfExtractor_currentState', JSON.stringify(pdfState));
+                console.log('✅ PDF state saved successfully:', pdfState);
+            } else {
+                console.log('❌ Cannot save PDF state - no PDF loaded');
+            }
+        }
+        
+        // Restore PDF state when returning to PDF viewer
+        async function restorePDFState() {
+            try {
+                const stateData = localStorage.getItem('pdfExtractor_currentState');
+                if (!stateData) return false;
+                
+                const state = JSON.parse(stateData);
+                
+                // Check if state is recent (within last 24 hours)
+                const hoursSinceLastSave = (Date.now() - state.savedAt) / (1000 * 60 * 60);
+                if (hoursSinceLastSave > 24) {
+                    localStorage.removeItem('pdfExtractor_currentState');
+                    return false;
+                }
+                
+                console.log('Attempting to restore PDF state:', state);
+                console.log('Server available:', serverAvailable, 'PDF path:', state.pdfPath);
+                
+                // If we have a path, try to load from server
+                if (state.pdfPath && serverAvailable) {
+                    try {
+                        const response = await fetch(`${SERVER_URL}/api/load-pdf`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ path: state.pdfPath })
+                        });
+                        
+                        if (response.ok) {
+                            const fileData = await response.arrayBuffer();
+                            
+                            // Restore state
+                            currentPDFPath = state.pdfPath;
+                            currentPDFData = fileData.slice();
+                            currentPDF = await pdfjsLib.getDocument(fileData).promise;
+                            totalPages = currentPDF.numPages;
+                            currentPage = Math.min(state.currentPage, totalPages);
+                            currentZoom = state.currentZoom;
+                            currentZoomIndex = state.currentZoomIndex;
+                            
+                            // Create a pseudo file object for session management
+                            currentPDFFile = {
+                                name: state.fileName,
+                                size: state.fileSize
+                            };
+                            
+                            // Update page navigation display elements
+                            const pageNumEl = document.getElementById('page-num');
+                            const pageCountEl = document.getElementById('page-count');
+                            const currentPageEl = document.getElementById('current-page');
+                            const totalPagesEl = document.getElementById('total-pages');
+                            const zoomLevelEl = document.getElementById('zoom-level');
+                            
+                            if (pageNumEl) pageNumEl.value = currentPage;
+                            if (pageCountEl) pageCountEl.textContent = totalPages;
+                            if (currentPageEl) currentPageEl.textContent = currentPage;
+                            if (totalPagesEl) totalPagesEl.textContent = totalPages;
+                            if (zoomLevelEl) zoomLevelEl.textContent = Math.round(currentZoom * 100) + '%';
+                            
+                            // Load session for this PDF
+                            const hasSession = hasExistingSession(state.fileName);
+                            if (hasSession) {
+                                await loadSessionHybrid(state.fileName);
+                            }
+                            
+                            // Render current page
+                            await renderPage(currentPage);
+                            
+                            // Show the canvas and hide loading (critical UI updates)
+                            const canvasContainer = document.getElementById('canvas-container');
+                            const loading = document.getElementById('loading');
+                            if (canvasContainer) canvasContainer.style.display = 'block';
+                            if (loading) loading.style.display = 'none';
+                            
+                            // Enable navigation controls
+                            const prevPageBtn = document.getElementById('prev-page');
+                            const nextPageBtn = document.getElementById('next-page');
+                            const clearSelectionsBtn = document.getElementById('clear-selections');
+                            const exportDataBtn = document.getElementById('export-data');
+                            const extractAllBtn = document.getElementById('extract-all');
+                            const zoomInBtn = document.getElementById('zoom-in');
+                            const zoomOutBtn = document.getElementById('zoom-out');
+                            
+                            if (prevPageBtn) prevPageBtn.disabled = (currentPage === 1);
+                            if (nextPageBtn) nextPageBtn.disabled = (currentPage === totalPages);
+                            if (clearSelectionsBtn) clearSelectionsBtn.disabled = false;
+                            if (exportDataBtn) exportDataBtn.disabled = false;
+                            if (extractAllBtn) extractAllBtn.disabled = (extractions.length === 0);
+                            if (zoomInBtn) zoomInBtn.disabled = false;
+                            if (zoomOutBtn) zoomOutBtn.disabled = false;
+                            
+                            // Update extraction list display and other UI elements
+                            updateExtractionList();
+                            
+                            // Update zoom controls if function exists
+                            if (typeof updateZoomControls === 'function') {
+                                updateZoomControls();
+                            }
+                            
+                            setStatus(`PDF restored: ${state.fileName} (Page ${currentPage}/${totalPages})`);
+                            return true;
+                        }
+                    } catch (error) {
+                        console.log('Server load failed, state restoration incomplete:', error);
+                    }
+                }
+                
+                // If server loading failed, we can still restore some UI state if the user loads the same file
+                console.log('PDF state available but no server path or server unavailable');
+                return false;
+                
+            } catch (error) {
+                console.error('Error restoring PDF state:', error);
+                localStorage.removeItem('pdfExtractor_currentState');
+                return false;
+            }
+        }
+        
+        // Save state when user navigates away from PDF viewer
+        window.addEventListener('beforeunload', savePDFState);
+        
+        // Navigate to Equipment Browser while saving PDF state
+        window.navigateToEquipmentBrowser = function() {
+            console.log('Navigating to Equipment Browser - saving PDF state first');
+            savePDFState();
+            // Small delay to ensure state is saved before navigation
+            setTimeout(() => {
+                window.location.href = 'equipment-browser.html';
+            }, 100);
+        };
+        
+        // Try to restore PDF state on page load
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Wait for server detection and DOM to fully initialize
+            setTimeout(async () => {
+                try {
+                    console.log('Attempting PDF state restoration...');
+                    const restored = await restorePDFState();
+                    if (restored) {
+                        console.log('✅ PDF state successfully restored');
+                    } else {
+                        console.log('ℹ️ No PDF state to restore or restoration failed');
+                    }
+                } catch (error) {
+                    console.error('❌ Error during PDF state restoration:', error);
+                }
+            }, 1500); // Increased timeout to allow server detection to complete
+        });
+        
+        // ============================================================
+        // END PDF STATE PERSISTENCE
+        // ============================================================
+        
     </script>
 </body>
 </html>
