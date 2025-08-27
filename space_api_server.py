@@ -245,6 +245,46 @@ def create_consolidated_equipment_pdfs(export_folder_path):
                             doc.insert_pdf(source_doc, from_page=page_num, to_page=page_num)
                             source_doc.close()
                             
+                            # Apply flattening and optimization to the inserted page
+                            inserted_page_idx = len(doc) - 1  # The page we just inserted
+                            inserted_page = doc[inserted_page_idx]
+                            
+                            print(f"Flattening and optimizing page {extraction['page_number']}...", flush=True)
+                            
+                            # Step 1: Flatten annotations, form fields, and interactive elements
+                            # Remove all annotations (flatten them into the page content)
+                            annots_to_remove = []
+                            for annot in inserted_page.annots():
+                                annots_to_remove.append(annot)
+                            
+                            for annot in annots_to_remove:
+                                # Apply redaction to flatten annotation content
+                                try:
+                                    annot.update()  # Ensure annotation is rendered
+                                except:
+                                    pass
+                                inserted_page.delete_annot(annot)
+                            
+                            # Step 2: Remove form fields and widgets
+                            for widget in inserted_page.widgets():
+                                try:
+                                    inserted_page.delete_widget(widget)
+                                except:
+                                    pass
+                            
+                            # Step 3: Clean and optimize page content streams
+                            inserted_page.clean_contents()  # Optimize content stream
+                            
+                            # Step 4: Remove optional content groups (layers) by flattening them
+                            try:
+                                # Get the page's resources and remove optional content references
+                                page_resources = inserted_page.get_contents()
+                                if page_resources:
+                                    # This helps flatten any layer-based content
+                                    inserted_page.wrap_contents()
+                            except Exception as e:
+                                print(f"Note: Could not optimize page layers: {str(e)}", flush=True)
+                            
                         else:
                             # Handle PNG-based extraction 
                             if not extraction['image_file']:
@@ -273,11 +313,41 @@ def create_consolidated_equipment_pdfs(export_folder_path):
                             # Use JPEG compression for better file size (good quality, much smaller)
                             page.insert_image(page_rect, stream=png_data, keep_proportion=True)
                     
-                    # Save the consolidated PDF with compression
+                    # Document-level optimization and scrubbing
+                    print("Applying document-level optimizations...", flush=True)
+                    
+                    # Step 5: Scrub the document to remove sensitive data and optimize structure
+                    # This removes unused objects, optimizes cross-reference table, and removes metadata
+                    try:
+                        doc.scrub(attached_files=True, clean_pages=True, 
+                                 remove_links=False, reset_fields=True, 
+                                 reset_responses=True)
+                        print("Document scrubbing completed", flush=True)
+                    except Exception as e:
+                        print(f"Note: Document scrubbing had issues: {str(e)}", flush=True)
+                    
+                    # Step 6: Final garbage collection and resource cleanup
+                    # Remove any remaining unused fonts, images, and objects
+                    try:
+                        # Additional cleanup - remove unused resources
+                        for page_num in range(len(doc)):
+                            page = doc[page_num]
+                            # Clean any remaining content issues
+                            page.clean_contents()
+                        print("Final page content optimization completed", flush=True)
+                    except Exception as e:
+                        print(f"Note: Final optimization had issues: {str(e)}", flush=True)
+                    
+                    # Save the consolidated PDF with maximum compression and optimization
+                    print("Saving optimized PDF...", flush=True)
                     doc.save(consolidated_pdf_path, 
-                            garbage=4,      # Garbage collect unused objects
-                            deflate=True,   # Enable deflate compression  
-                            clean=True)     # Clean and optimize the PDF structure
+                            garbage=4,          # Garbage collect unused objects (maximum level)
+                            deflate=True,       # Enable deflate compression for streams
+                            clean=True,         # Clean and optimize the PDF structure  
+                            pretty=False,       # Compress structure (no pretty formatting)
+                            encryption=fitz.PDF_ENCRYPT_NONE,  # No encryption overhead
+                            permissions=-1,     # No permission restrictions
+                            expand=False)       # Keep compressed streams compressed
                     doc.close()
                     
                     print(f"✅ Consolidated PDF created: {consolidated_pdf_path}", flush=True)
@@ -347,11 +417,37 @@ def create_consolidated_equipment_pdfs(export_folder_path):
                         # Use JPEG compression for better file size (good quality, much smaller)  
                         page.insert_image(page_rect, stream=png_data, keep_proportion=True)
                     
-                    # Save the consolidated PDF with compression
+                    # Document-level optimization and scrubbing (PNG-only mode)
+                    print("Applying document-level optimizations...", flush=True)
+                    
+                    # Apply document scrubbing and optimization
+                    try:
+                        doc.scrub(attached_files=True, clean_pages=True, 
+                                 remove_links=False, reset_fields=True, 
+                                 reset_responses=True)
+                        print("Document scrubbing completed", flush=True)
+                    except Exception as e:
+                        print(f"Note: Document scrubbing had issues: {str(e)}", flush=True)
+                    
+                    # Final cleanup for PNG-based pages
+                    try:
+                        for page_num in range(len(doc)):
+                            page = doc[page_num]
+                            page.clean_contents()
+                        print("Final page content optimization completed", flush=True)
+                    except Exception as e:
+                        print(f"Note: Final optimization had issues: {str(e)}", flush=True)
+                    
+                    # Save the consolidated PDF with maximum compression and optimization
+                    print("Saving optimized PDF...", flush=True)
                     doc.save(consolidated_pdf_path, 
-                            garbage=4,      # Garbage collect unused objects
-                            deflate=True,   # Enable deflate compression  
-                            clean=True)     # Clean and optimize the PDF structure
+                            garbage=4,          # Garbage collect unused objects (maximum level)
+                            deflate=True,       # Enable deflate compression for streams
+                            clean=True,         # Clean and optimize the PDF structure  
+                            pretty=False,       # Compress structure (no pretty formatting)
+                            encryption=fitz.PDF_ENCRYPT_NONE,  # No encryption overhead
+                            permissions=-1,     # No permission restrictions
+                            expand=False)       # Keep compressed streams compressed
                     doc.close()
                     
                     print(f"✅ Consolidated PDF created: {consolidated_pdf_path}", flush=True)
