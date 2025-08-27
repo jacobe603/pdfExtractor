@@ -920,16 +920,39 @@
             const container = document.getElementById('equipment-types-list');
             container.innerHTML = '';
 
-            equipmentTypes.forEach(type => {
+            // Get unique equipment types from current extraction data
+            const activeEquipmentTypes = new Set();
+            extractionsData.forEach(extraction => {
+                if (extraction.equipmentType) {
+                    activeEquipmentTypes.add(extraction.equipmentType);
+                }
+            });
+
+            // Convert to sorted array and create type objects
+            const currentEquipmentTypes = Array.from(activeEquipmentTypes)
+                .sort()
+                .map(typeValue => {
+                    // Try to find the label from settings, otherwise use the value as label
+                    const settingsType = equipmentTypes.find(t => t.value === typeValue);
+                    return {
+                        value: typeValue,
+                        label: settingsType ? settingsType.label : typeValue
+                    };
+                });
+
+            // Only render equipment types that have extractions in the current data
+            currentEquipmentTypes.forEach(type => {
                 const count = getEquipmentCount(type.value);
-                const div = document.createElement('div');
-                div.className = 'equipment-type';
-                div.dataset.equipment = type.value;
-                div.innerHTML = `
-                    <span class="equipment-label">${type.label}</span>
-                    <span class="equipment-count">${count}</span>
-                `;
-                container.appendChild(div);
+                if (count > 0) { // Only show types with actual extractions
+                    const div = document.createElement('div');
+                    div.className = 'equipment-type';
+                    div.dataset.equipment = type.value;
+                    div.innerHTML = `
+                        <span class="equipment-label">${type.label}</span>
+                        <span class="equipment-count">${count}</span>
+                    `;
+                    container.appendChild(div);
+                }
             });
         }
 
