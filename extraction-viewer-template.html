@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extraction Viewer - PDF Schedule Extractor</title>
+    
+    <!-- Data placeholder for export injection -->
+    <script>
+        // This will be replaced during export with actual project data
+        window.EMBEDDED_PROJECT_DATA = /*DATA_PLACEHOLDER*/null;
+    </script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.3em;
+            font-weight: 600;
+        }
+
+        .project-info {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .equipment-sidebar {
+            width: 250px;
+            background: white;
+            border-right: 1px solid #dee2e6;
+            padding: 15px;
+            overflow-y: auto;
+            box-shadow: 2px 0 4px rgba(0,0,0,0.1);
+        }
+
+        .equipment-sidebar h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        .equipment-type {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 5px;
+            border: 1px solid #e9ecef;
+        }
+
+        .equipment-type:hover {
+            background: #f8f9fa;
+        }
+
+        .equipment-type.active {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+
+        .equipment-count {
+            background: #6c757d;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            min-width: 20px;
+            text-align: center;
+        }
+
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .extractions-grid {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: grid;
+            gap: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        }
+
+        .extraction-card {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 12px;
+            padding: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            min-height: 600px;
+        }
+
+        .extraction-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border-color: #3498db;
+        }
+
+        .extraction-thumbnail {
+            width: 100%;
+            height: 400px;
+            background: #f8f9fa;
+            background-image: 
+                linear-gradient(45deg, #ffffff 25%, transparent 25%), 
+                linear-gradient(-45deg, #ffffff 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #ffffff 75%), 
+                linear-gradient(-45deg, transparent 75%, #ffffff 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border: 1px solid #e9ecef;
+        }
+
+        .extraction-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            object-position: center;
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .extraction-title {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 16px;
+            font-size: 1.8em;
+        }
+
+        .extraction-meta {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .meta-tag {
+            background: #e9ecef;
+            color: #495057;
+            padding: 6px 16px;
+            border-radius: 16px;
+            font-size: 1.1em;
+        }
+
+        .meta-tag.equipment {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .meta-tag.type {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px 20px;
+            color: #6c757d;
+            grid-column: 1 / -1;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 0;
+            width: 100%;
+            height: 100%;
+            max-width: none;
+            max-height: none;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: #2c3e50;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #6c757d;
+            line-height: 1;
+        }
+
+        .modal-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .extraction-image-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .extraction-image-container img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+        }
+
+        .ocr-section {
+            margin-top: 20px;
+        }
+
+        .ocr-section h3 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+
+        .ocr-content {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .ocr-content pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin: 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.4;
+        }
+
+        .file-links {
+            margin-top: 30px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .file-link {
+            background: #3498db;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 1.2em;
+        }
+
+        .file-link:hover {
+            background: #2980b9;
+            color: white;
+        }
+
+        /* File loading UI styles */
+        .file-loader {
+            background: #f8f9fa;
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 40px;
+            margin: 20px;
+            text-align: center;
+        }
+
+        .file-loader-content h3 {
+            color: #495057;
+            margin-bottom: 10px;
+        }
+
+        .file-loader-content p {
+            color: #6c757d;
+            margin-bottom: 20px;
+        }
+
+        .file-drop-zone {
+            background: white;
+            border: 2px dashed #007bff;
+            border-radius: 8px;
+            padding: 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-drop-zone:hover {
+            border-color: #0056b3;
+            background: #f8f9ff;
+        }
+
+        .file-drop-zone.dragover {
+            border-color: #28a745;
+            background: #f8fff8;
+        }
+
+        .drop-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .drop-text {
+            font-size: 18px;
+            color: #495057;
+            margin-bottom: 10px;
+        }
+
+        .drop-or {
+            color: #6c757d;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+
+        .browse-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s ease;
+        }
+
+        .browse-button:hover {
+            background: #0056b3;
+        }
+
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            
+            .equipment-sidebar {
+                width: 100%;
+                max-height: 150px;
+            }
+            
+            .extractions-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+                padding: 10px;
+            }
+            
+            .extraction-thumbnail {
+                height: 250px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Extraction Viewer</h1>
+        <div class="project-info" id="project-info">Loading project information...</div>
+    </div>
+
+    <!-- Fallback file loading UI -->
+    <div class="file-loader" id="file-loader" style="display: none;">
+        <div class="file-loader-content">
+            <h3>📁 Load Project Data</h3>
+            <p>Drag and drop your <code>project_data.json</code> file here, or click to browse:</p>
+            <div class="file-drop-zone" id="file-drop-zone">
+                <div class="drop-zone-content">
+                    <div class="drop-icon">📄</div>
+                    <div class="drop-text">Drop project_data.json here</div>
+                    <div class="drop-or">or</div>
+                    <button class="browse-button" id="browse-button">Choose File</button>
+                </div>
+            </div>
+            <input type="file" id="file-input" accept=".json" style="display: none;">
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="equipment-sidebar">
+            <h3>Equipment Types</h3>
+            <div id="equipment-types-list">
+                <div class="equipment-type active" data-equipment="all">
+                    <span>All Equipment</span>
+                    <span class="equipment-count" id="total-count">0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-area">
+            <div class="extractions-grid" id="extractions-container">
+                <div class="no-results">
+                    <h3>Loading extractions...</h3>
+                    <p>Please wait while we load your extraction data.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for detailed view -->
+    <div class="modal" id="extraction-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Extraction Details</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Content will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Application state
+        let projectData = null;
+        let extractionsData = [];
+        let filteredExtractions = [];
+        let currentEquipmentFilter = 'all';
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', function() {
+            loadProjectData();
+        });
+
+        // Load project data from project_data.json
+        async function loadProjectData() {
+            // First priority: Use embedded data if available (injected during export)
+            if (window.EMBEDDED_PROJECT_DATA !== null) {
+                projectData = window.EMBEDDED_PROJECT_DATA;
+                console.log('Using embedded project data:', projectData);
+                updateProjectInfo();
+                processProjectData();
+                return;
+            }
+            
+            // Second priority: Try fetch method for server-based viewing
+            try {
+                const response = await fetch('project_data.json');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                projectData = await response.json();
+                console.log('Loaded project data via fetch:', projectData);
+                updateProjectInfo();
+                processProjectData();
+                return;
+                
+            } catch (error) {
+                console.error('Error loading project data:', error);
+                
+                // Third priority: Show file loading UI for manual loading
+                showFileLoader();
+            }
+        }
+
+        // Helper function to update project info display
+        function updateProjectInfo() {
+            const projectInfo = document.getElementById('project-info');
+            projectInfo.textContent = `${projectData.project || 'Untitled Project'} - ${projectData.totalExtractions || 0} extractions - Exported: ${projectData.exportDate || 'Unknown'}`;
+        }
+
+        // Show the file loading interface
+        function showFileLoader() {
+            document.getElementById('file-loader').style.display = 'block';
+            document.getElementById('main-container').style.display = 'none';
+            
+            // Update project info to show loading state
+            const projectInfo = document.getElementById('project-info');
+            projectInfo.textContent = 'Please load your project data file below';
+            
+            // Set up file loading functionality
+            setupFileLoader();
+        }
+
+        // Set up drag & drop and file input functionality
+        function setupFileLoader() {
+            const fileInput = document.getElementById('file-input');
+            const browseButton = document.getElementById('browse-button');
+            const dropZone = document.getElementById('file-drop-zone');
+            
+            // Browse button click
+            browseButton.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            // File input change
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    loadJsonFile(e.target.files[0]);
+                }
+            });
+            
+            // Drag and drop events
+            dropZone.addEventListener('click', () => {
+                fileInput.click();
+            });
+            
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+            
+            dropZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    loadJsonFile(files[0]);
+                }
+            });
+        }
+
+        // Load JSON file from file input
+        function loadJsonFile(file) {
+            if (!file.name.toLowerCase().endsWith('.json')) {
+                alert('Please select a valid JSON file.');
+                return;
+            }
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    projectData = JSON.parse(e.target.result);
+                    console.log('Loaded project data from file:', projectData);
+                    
+                    // Hide file loader and show main content
+                    document.getElementById('file-loader').style.display = 'none';
+                    document.getElementById('main-container').style.display = 'flex';
+                    
+                    // Update project info and process data
+                    updateProjectInfo();
+                    processProjectData();
+                    
+                } catch (error) {
+                    console.error('Error parsing JSON file:', error);
+                    alert('Error reading JSON file. Please make sure it\'s a valid project_data.json file.');
+                }
+            };
+            
+            reader.readAsText(file);
+        }
+
+        // Process project data and create flat extraction array
+        function processProjectData() {
+            extractionsData = [];
+            
+            if (projectData.equipment) {
+                // New format: equipment-grouped
+                Object.entries(projectData.equipment).forEach(([equipmentType, extractions]) => {
+                    extractions.forEach(extraction => {
+                        extractionsData.push({
+                            ...extraction,
+                            equipmentType: equipmentType
+                        });
+                    });
+                });
+            }
+            
+            console.log(`Processed ${extractionsData.length} extractions`);
+            
+            // Update equipment types and render
+            renderEquipmentTypes();
+            applyFilter();
+        }
+
+        // Render equipment types in sidebar
+        function renderEquipmentTypes() {
+            const container = document.getElementById('equipment-types-list');
+            const allOption = container.querySelector('[data-equipment="all"]');
+            
+            // Clear existing equipment types (keep "All Equipment")
+            const equipmentTypes = container.querySelectorAll('[data-equipment]:not([data-equipment="all"])');
+            equipmentTypes.forEach(el => el.remove());
+            
+            // Get unique equipment types from data
+            const types = [...new Set(extractionsData.map(e => e.equipmentType))].sort();
+            
+            // Update total count
+            const totalCount = document.getElementById('total-count');
+            totalCount.textContent = extractionsData.length;
+            
+            // Add equipment type options
+            types.forEach(type => {
+                const count = extractionsData.filter(e => e.equipmentType === type).length;
+                
+                const element = document.createElement('div');
+                element.className = 'equipment-type';
+                element.dataset.equipment = type;
+                element.innerHTML = `
+                    <span>${type}</span>
+                    <span class="equipment-count">${count}</span>
+                `;
+                element.addEventListener('click', () => filterByEquipment(type));
+                
+                container.appendChild(element);
+            });
+        }
+
+        // Filter extractions by equipment type
+        function filterByEquipment(equipmentType) {
+            currentEquipmentFilter = equipmentType;
+            
+            // Update active state in sidebar
+            const equipmentElements = document.querySelectorAll('.equipment-type');
+            equipmentElements.forEach(el => {
+                el.classList.toggle('active', el.dataset.equipment === equipmentType);
+            });
+            
+            applyFilter();
+        }
+
+        // Apply current filters
+        function applyFilter() {
+            filteredExtractions = extractionsData.filter(extraction => {
+                if (currentEquipmentFilter === 'all') return true;
+                return extraction.equipmentType === currentEquipmentFilter;
+            });
+            
+            renderExtractions();
+        }
+
+        // Render extractions grid
+        function renderExtractions() {
+            const container = document.getElementById('extractions-container');
+            
+            if (filteredExtractions.length === 0) {
+                container.innerHTML = `
+                    <div class="no-results">
+                        <h3>No extractions found</h3>
+                        <p>No extractions match the current filter.</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = '';
+            
+            filteredExtractions.forEach(extraction => {
+                const card = createExtractionCard(extraction);
+                container.appendChild(card);
+            });
+        }
+
+        // Create extraction card element
+        function createExtractionCard(extraction) {
+            const card = document.createElement('div');
+            card.className = 'extraction-card';
+            card.onclick = () => showExtractionDetails(extraction);
+            
+            const imagePath = extraction.files?.image || '';
+            
+            card.innerHTML = `
+                <div class="extraction-thumbnail">
+                    ${imagePath ? `<img src="${imagePath}" alt="${extraction.extractionName}" onerror="this.style.display='none';">` : '<div style="color: #6c757d;">No image</div>'}
+                </div>
+                <div class="extraction-title">${extraction.extractionName || 'Untitled'}</div>
+                <div class="extraction-meta">
+                    <span class="meta-tag equipment">${extraction.equipmentType}</span>
+                    <span class="meta-tag type">${extraction.extractionType || 'Unknown'}</span>
+                    ${extraction.pageNumber ? `<span class="meta-tag">Page ${extraction.pageNumber}</span>` : ''}
+                </div>
+            `;
+            
+            return card;
+        }
+
+        // Show extraction details in modal
+        async function showExtractionDetails(extraction) {
+            const modal = document.getElementById('extraction-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalBody = document.getElementById('modal-body');
+            
+            modalTitle.textContent = extraction.extractionName || 'Extraction Details';
+            
+            let modalContent = `
+                <div class="extraction-image-container">
+                    ${extraction.files?.image ? `<img src="${extraction.files.image}" alt="${extraction.extractionName}">` : '<p>No image available</p>'}
+                </div>
+                
+                <div class="extraction-metadata">
+                    <p><strong>Equipment Type:</strong> ${extraction.equipmentType}</p>
+                    <p><strong>Extraction Type:</strong> ${extraction.extractionType || 'Unknown'}</p>
+                    ${extraction.pageNumber ? `<p><strong>Page:</strong> ${extraction.pageNumber}</p>` : ''}
+                    ${extraction.description ? `<p><strong>Description:</strong> ${extraction.description}</p>` : ''}
+                </div>
+            `;
+            
+            // Add OCR data if available
+            if (extraction.ocrData || extraction.files?.tableData) {
+                modalContent += `<div class="ocr-section">`;
+                
+                if (extraction.ocrData?.rawText) {
+                    modalContent += `
+                        <h3>OCR Text Data</h3>
+                        <div class="ocr-content">
+                            <pre>${extraction.ocrData.rawText}</pre>
+                        </div>
+                    `;
+                } else if (extraction.files?.tableData) {
+                    modalContent += `
+                        <h3>OCR Data Available</h3>
+                        <p>Click the links below to view the OCR data files.</p>
+                    `;
+                }
+                
+                modalContent += `</div>`;
+            }
+            
+            // Add file download links
+            if (extraction.files) {
+                modalContent += `
+                    <div class="file-links">
+                        ${extraction.files.image ? `<a href="${extraction.files.image}" class="file-link" download>Download Image</a>` : ''}
+                        ${extraction.files.tableData ? `<a href="${extraction.files.tableData}" class="file-link" download>Download Table Data</a>` : ''}
+                        ${extraction.files.textData ? `<a href="${extraction.files.textData}" class="file-link" download>Download Text Data</a>` : ''}
+                    </div>
+                `;
+            }
+            
+            modalBody.innerHTML = modalContent;
+            modal.style.display = 'flex';
+        }
+
+        // Close modal
+        function closeModal() {
+            const modal = document.getElementById('extraction-modal');
+            modal.style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('extraction-modal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+
+        // Keyboard navigation
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>

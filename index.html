@@ -5032,6 +5032,22 @@
                 const readmeContent = createReadmeFile(mainData);
                 zip.file('README.txt', readmeContent);
                 
+                // Add standalone viewer template with embedded data
+                try {
+                    const viewerResponse = await fetch('extraction-viewer-template.html');
+                    let viewerTemplate = await viewerResponse.text();
+                    
+                    // Safe JSON replacement - avoid all JavaScript syntax issues
+                    const safeJsonData = JSON.stringify(mainData).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                    viewerTemplate = viewerTemplate.replace('/*DATA_PLACEHOLDER*/null', safeJsonData);
+                    
+                    zip.file('index.html', viewerTemplate);
+                    progressText.textContent = 'Added standalone viewer with embedded data...';
+                } catch (error) {
+                    console.error('Could not load viewer template:', error);
+                    progressText.textContent = 'Viewer template not available, continuing...';
+                }
+                
                 // Add session file for easy re-import
                 const sessionData = createSessionData();
                 zip.file('session.pdfextractor.json', JSON.stringify(sessionData, null, 2));
@@ -6193,6 +6209,22 @@
                 // Add session file
                 const sessionData = createSessionData();
                 zip.file('session.pdfextractor.json', JSON.stringify(sessionData, null, 2));
+                
+                // Add standalone viewer template with embedded data
+                try {
+                    const viewerResponse = await fetch('extraction-viewer-template.html');
+                    let viewerTemplate = await viewerResponse.text();
+                    
+                    // Safe JSON replacement - avoid all JavaScript syntax issues
+                    const safeJsonData = JSON.stringify(mainData).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                    viewerTemplate = viewerTemplate.replace('/*DATA_PLACEHOLDER*/null', safeJsonData);
+                    
+                    zip.file('index.html', viewerTemplate);
+                    progressText.textContent = 'Added standalone viewer with embedded data...';
+                } catch (error) {
+                    console.error('Could not load viewer template:', error);
+                    progressText.textContent = 'Viewer template not available, continuing...';
+                }
                 
                 // Update progress for ZIP generation
                 progressText.textContent = 'Generating ZIP file...';
