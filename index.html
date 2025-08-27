@@ -1272,7 +1272,7 @@
             if (currentPage !== pageNum + 1) {
                 currentPage = pageNum + 1;
                 updatePageInfo();
-                renderDebounce(currentPage);
+                debouncedRenderPage(currentPage);
                 // Note: spaces will be re-rendered as part of renderPage
             }
         }
@@ -4070,7 +4070,7 @@
             if (extraction.coordinates && currentPage !== extraction.coordinates.page) {
                 currentPage = extraction.coordinates.page;
                 updatePageInfo();
-                renderDebounce(currentPage);
+                debouncedRenderPage(currentPage);
                 // Note: highlight will show when render completes
             } else {
                 showExtractionHighlight(extraction);
@@ -4205,7 +4205,7 @@
             // Navigate to the correct page if needed
             if (extraction.coordinates && currentPage !== extraction.coordinates.page) {
                 currentPage = extraction.coordinates.page;
-                renderDebounce(currentPage);
+                debouncedRenderPage(currentPage);
                 // Note: modal will open when render completes
             } else {
                 openEditModal(extraction);
