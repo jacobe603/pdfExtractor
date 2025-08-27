@@ -16,30 +16,40 @@ A sophisticated PDF table extraction tool built for construction schedule analys
 
 ### Key Features
 - **Equipment-Based Organization**: Extractions grouped by equipment type (FANS, VAV, GRD, RTU, AHU, DUCTING, CUSTOM)
+- **Equipment Browser Interface**: Dedicated responsive interface (`equipment-browser.html`) for viewing and organizing extracted schedules
 - **Multi-Type Extractions**: Schedule, Drawing, Table, Detail, Specification, Other
 - **Advanced OCR System**: Gemini API with comprehensive notes extraction, Tesseract.js for offline use
 - **Installation Notes Extraction**: Automatically captures numbered installation requirements and specifications
 - **Comprehensive File Generation**: PNG images, individual PDF files, JSON table data, TXT text files with notes sections
 - **Real-time Selection**: Canvas-based rectangle drawing with zoom support
 - **PDF Generation**: PNG-to-PDF conversion using PyMuPDF for individual extraction PDFs
+- **Adaptive Grid Layout**: Viewport-aware responsive grid system (4-10 columns) with complete image display
+- **BlueBeam Spaces Integration**: Detection and visualization of BlueBeam Spaces in PDF files
 
 ## File Structure
 ```
 pdfExtractor/
-├── index.html                  # Main application
+├── index.html                  # Main PDF extraction application
+├── equipment-browser.html      # Equipment Browser interface with responsive grid
 ├── gemini-ocr-provider.js      # Google Gemini API integration
 ├── ocr-table-extractor.js      # Multi-provider OCR system
+├── bluebeam-spaces.js          # BlueBeam Spaces detection and visualization
+├── space_api_server.py         # Backend server for PDF processing and space detection
 ├── batch_processor.py          # Python batch processing
+├── config.json                 # Configuration for equipment types and settings
 ├── CLAUDE.md                   # This file
+├── BLUEBEAM_SPACES_README.md   # BlueBeam Spaces documentation
 └── README.md                   # User documentation
 ```
 
 ## Development Commands
 
 ### Testing
-- Open `index.html` in browser for testing
+- Open `index.html` in browser for PDF extraction testing
+- Open `equipment-browser.html` for Equipment Browser interface testing
 - Use browser developer tools for debugging
 - Test OCR with sample construction PDFs
+- Test Equipment Browser with exported data folders via drag & drop
 
 ### Batch Processing
 ```bash
@@ -163,6 +173,8 @@ python batch_processor.py exported_data.json -o organized_schedules -r -v
 - **Local Storage**: Immediate persistence without server calls
 - **Lazy Loading**: PDF pages loaded on demand
 - **Memory Management**: Proper cleanup of OCR workers and canvas contexts
+- **Responsive Grid Layout**: Viewport-aware sizing with CSS Grid for optimal performance
+- **Image Optimization**: Object-fit contain for complete image display without performance impact
 
 ## Future Enhancements
 - **Equipment Templates**: Pre-configured extraction templates by equipment type
@@ -196,5 +208,26 @@ python batch_processor.py exported_data.json -o organized_schedules -r -v
 - **PDF Generation**: Test PNG-to-PDF conversion with and without settings enabled
 - **Modal Workflow**: Test immediate OCR in modal, save without OCR, and post-save OCR button
 - **UI Workflow**: Test modal preview shows both tables and notes correctly
+- **Equipment Browser**: Test responsive grid layout at different screen sizes (desktop, tablet, mobile)
+- **Image Display**: Verify complete PNG extraction content is visible without cropping
+- **Grid Filtering**: Test equipment type filtering with adaptive column counts
+- **Drag & Drop**: Test folder loading functionality in Equipment Browser
+- **Viewport Responsiveness**: Test screen space utilization on various screen dimensions
 
-This tool represents a comprehensive solution for construction document analysis with modern web technologies and advanced AI integration.
+## Recent Enhancements
+
+### Equipment Browser (Version 2.1)
+- **Responsive Grid System**: Implemented adaptive CSS Grid layout that scales from 4-10 columns based on viewport width
+- **Viewport-Aware Sizing**: Dynamic thumbnail heights using `calc()` functions with `vh` units for optimal screen utilization
+- **Complete Image Display**: Fixed image cropping issue by changing from `object-fit: cover` to `object-fit: contain`
+- **Enhanced Visual Design**: Added subtle checkerboard backgrounds, borders, shadows, and hover effects
+- **Smart Filtering**: Equipment type filters dynamically adjust grid layout (single column for 1 item, max 3 columns for filtered views)
+- **Mobile Optimization**: Responsive design with viewport-specific optimizations for tablets and mobile devices
+
+### Technical Implementation
+- **CSS Grid Mastery**: Advanced usage of CSS Grid with media queries for responsive breakpoints
+- **Viewport Calculations**: Sophisticated use of `calc((100vh - offset) / divisor)` for dynamic sizing
+- **Object-Fit Strategy**: Strategic use of `contain` vs `cover` for complete content visibility
+- **Performance Optimizations**: Reduced gaps, padding, and improved space utilization without performance impact
+
+This tool represents a comprehensive solution for construction document analysis with modern web technologies, advanced AI integration, and optimized user experience across all device types.

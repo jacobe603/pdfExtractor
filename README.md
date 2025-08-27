@@ -22,6 +22,7 @@ A sophisticated tool for extracting construction schedules, drawings, and tables
 - **Multi-File Generation**: PNG images, JSON table data, and TXT text files per extraction
 - **Local Storage**: Automatic persistence with equipment-based organization
 - **Batch Processing**: Enhanced Python script for comprehensive file organization
+- **Equipment Browser**: Dedicated interface for viewing and organizing extracted schedules with adaptive grid layout
 
 ## Usage
 
@@ -85,6 +86,18 @@ The tool automatically organizes extractions by equipment type:
 - **Custom Types**: Add your own equipment types (e.g., CHILLERS, PUMPS)
 - **Automatic Grouping**: Sidebar shows extractions grouped by equipment type
 - **Visual Indicators**: Icons show extraction type (📋 Schedule, 📐 Drawing, 📊 Table, etc.)
+
+### Equipment Browser
+
+Access the Equipment Browser via `equipment-browser.html` for enhanced viewing and management:
+
+- **Adaptive Grid Layout**: Responsive grid that scales from 4-10 columns based on screen size
+- **Smart Filtering**: Filter by equipment type with dynamic grid adjustment
+- **Maximized Screen Usage**: Viewport-aware sizing that utilizes full screen dimensions
+- **Complete Image Display**: Shows full PNG extraction content without cropping using intelligent scaling
+- **Drag & Drop Support**: Direct folder loading with automatic file organization
+- **Visual Enhancements**: Subtle backgrounds, borders, and hover effects for better image presentation
+- **Mobile Responsive**: Optimized layout for tablets and mobile devices
 
 ### Batch Processing
 
@@ -171,12 +184,16 @@ The tool is designed for easy extension:
 
 ```
 pdfExtractor/
-├── index.html              # Main application
-├── ocr-table-extractor.js  # Multi-provider OCR table extraction module
-├── gemini-ocr-provider.js  # Google Gemini OCR provider
-├── batch_processor.py      # Enhanced Python batch processor
-├── CLAUDE.md              # Claude Code integration guide
-└── README.md              # This file
+├── index.html                 # Main PDF extraction application
+├── equipment-browser.html     # Equipment Browser interface
+├── ocr-table-extractor.js     # Multi-provider OCR table extraction module
+├── gemini-ocr-provider.js     # Google Gemini OCR provider
+├── batch_processor.py         # Enhanced Python batch processor
+├── bluebeam-spaces.js         # BlueBeam Spaces integration
+├── space_api_server.py        # Backend server for PDF processing
+├── CLAUDE.md                  # Claude Code integration guide
+├── BLUEBEAM_SPACES_README.md  # BlueBeam Spaces documentation
+└── README.md                  # This file
 ```
 
 ### Modular Architecture
@@ -218,6 +235,14 @@ No build process required - just open `index.html` in a browser.
 
 ## Recent Updates
 
+### Version 2.1 - Equipment Browser & Screen Optimization
+- **Equipment Browser Interface**: Dedicated responsive interface for viewing extracted schedules
+- **Maximized Screen Utilization**: Viewport-aware grid system using full screen dimensions
+- **Complete Image Display**: Fixed PNG display to show full extraction content without cropping
+- **Adaptive Grid Layout**: 4-10 columns based on screen size with smart filtering
+- **Enhanced Visual Design**: Improved thumbnails with backgrounds, borders, and hover effects
+- **Mobile Optimization**: Responsive design optimized for tablets and mobile devices
+
 ### Version 2.0 - Equipment-Organized Architecture
 - **Equipment-Based Organization**: Complete restructure around equipment types
 - **Google Gemini Integration**: Superior OCR accuracy with AI-powered table recognition
@@ -225,6 +250,7 @@ No build process required - just open `index.html` in a browser.
 - **Enhanced Batch Processing**: Comprehensive file organization and reporting
 - **Improved UI**: Type icons, custom equipment support, grouped sidebar
 - **Backward Compatibility**: Supports both old and new data formats
+- **BlueBeam Spaces Integration**: Detection and visualization of BlueBeam Spaces in PDF files
 
 ### Key Improvements
 - **~80% better OCR accuracy** with Google Gemini vs traditional OCR
@@ -232,3 +258,5 @@ No build process required - just open `index.html` in a browser.
 - **Comprehensive data export** with individual file generation
 - **Flexible extraction types** beyond just schedules
 - **Enhanced batch processing** with detailed reporting and statistics
+- **Responsive Equipment Browser** with maximized screen space utilization
+- **Complete image visibility** ensuring full PNG extraction content is displayed
