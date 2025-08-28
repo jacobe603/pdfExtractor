@@ -29,6 +29,9 @@
     <!-- Shared Utilities -->
     <script src="shared-utils.js"></script>
     
+    <!-- API Key Loader -->
+    <script src="api-key-loader.js"></script>
+    
     <style>
         /* PDF Viewer Specific Styles */
 
@@ -97,29 +100,45 @@
             background: rgba(52, 152, 219, 0.2);
         }
 
-        .equipment-type-GRD {
+        /* Equipment Type Colors - Aligned with config.json */
+        .equipment-type-FANS {
+            border-color: #3498db;
+            background: rgba(52, 152, 219, 0.1);
+        }
+
+        .equipment-type-VAV {
             border-color: #9b59b6;
             background: rgba(155, 89, 182, 0.1);
         }
 
-        .equipment-type-VAV {
+        .equipment-type-RTU {
             border-color: #e67e22;
             background: rgba(230, 126, 34, 0.1);
         }
 
-        .equipment-type-FANS {
+        .equipment-type-AHU {
             border-color: #27ae60;
             background: rgba(39, 174, 96, 0.1);
         }
 
-        .equipment-type-RTU {
-            border-color: #2980b9;
-            background: rgba(41, 128, 185, 0.1);
+        .equipment-type-GRD {
+            border-color: #95a5a6;
+            background: rgba(149, 165, 166, 0.1);
+        }
+
+        .equipment-type-DUCTING {
+            border-color: #34495e;
+            background: rgba(52, 73, 94, 0.1);
         }
 
         .equipment-type-OTHER {
-            border-color: #95a5a6;
-            background: rgba(149, 165, 166, 0.1);
+            border-color: #7f8c8d;
+            background: rgba(127, 140, 141, 0.1);
+        }
+
+        .equipment-type-CUSTOM {
+            border-color: #e74c3c;
+            background: rgba(231, 76, 60, 0.1);
         }
 
         .sidebar {
@@ -149,6 +168,48 @@
             cursor: pointer;
             transition: all 0.3s;
             user-select: none; /* Prevent text selection on right-click */
+        }
+
+        .equipment-group-header {
+            font-weight: bold;
+            margin-top: 15px;
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            transition: all 0.2s ease;
+        }
+
+        .equipment-group-header:hover {
+            opacity: 0.8;
+            transform: translateX(2px);
+        }
+
+        .equipment-group-toggle {
+            font-size: 12px;
+            transition: transform 0.2s ease;
+            margin-left: 8px;
+        }
+
+        .equipment-group-toggle.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        .equipment-group-items {
+            overflow: hidden;
+            transition: max-height 0.3s ease, opacity 0.2s ease;
+            max-height: 1000px;
+            opacity: 1;
+        }
+
+        .equipment-group-items.collapsed {
+            max-height: 0;
+            opacity: 0;
+            margin-bottom: 0;
         }
 
         .extraction-item:hover {
@@ -621,6 +682,7 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <h3 style="margin: 0;" id="extraction-header">Extracted Schedules</h3>
                 <div style="display: flex; gap: 5px; align-items: center;">
+                    <button class="btn" id="toggle-all-groups" style="font-size: 12px; padding: 6px 12px; background: #34495e; display: none;" title="Collapse/Expand All Groups">📁</button>
                     <button class="btn" id="edit-selected" style="font-size: 12px; padding: 6px 12px; background: #3498db; display: none;">Edit Selected</button>
                     <button class="btn" id="manage-all" style="font-size: 12px; padding: 6px 12px; background: #9b59b6; display: none;">Manage All</button>
                 </div>
@@ -1083,7 +1145,7 @@
         let pdfInput, canvasContainer, pdfCanvas, savedOverlay, tempOverlay;
         let loading, statusText, extractionList, modal, prevPageBtn, nextPageBtn;
         let currentPageSpan, totalPagesSpan;
-        let clearSelectionsBtn, exportDataBtn, extractAllBtn;
+        let clearSelectionsBtn, exportDataBtn;
         let zoomInBtn, zoomOutBtn, zoomLevelSpan;
 
         // BlueBeam Spaces Functions
@@ -1545,7 +1607,6 @@
             // Enable export button if we have extractions
             if (extractions.length > 0) {
                 exportDataBtn.disabled = false;
-                extractAllBtn.disabled = false;
             }
         }
         
@@ -1702,11 +1763,21 @@
             
             window.settingsManager.saveUserSettings({ defaultSettings });
             
-            // Save API key
+            // Save API key using the API key loader
             const apiKey = document.getElementById('settings-gemini-key').value;
-            if (apiKey) {
-                localStorage.setItem('gemini-api-key', apiKey);
+            if (apiKey && window.apiKeyLoader) {
+                // Save to both localStorage and server
+                window.apiKeyLoader.saveApiKey(apiKey).then(success => {
+                    if (success) {
+                        console.log('API key saved successfully');
+                    }
+                });
                 // Also update the main OCR config input
+                const mainApiInput = document.getElementById('gemini-api-key');
+                if (mainApiInput) mainApiInput.value = apiKey;
+            } else if (apiKey) {
+                // Fallback to localStorage only
+                localStorage.setItem('gemini-api-key', apiKey);
                 const mainApiInput = document.getElementById('gemini-api-key');
                 if (mainApiInput) mainApiInput.value = apiKey;
             }
@@ -1751,6 +1822,9 @@
             
             // Initialize Settings Manager
             await initializeSettings();
+            
+            // Initialize equipment colors after settings are loaded
+            initializeEquipmentColors();
             
             // Load recent files
             loadRecentFiles();
@@ -1823,6 +1897,12 @@
             const manageAllBtn = document.getElementById('manage-all');
             if (manageAllBtn) {
                 manageAllBtn.addEventListener('click', openManageAllModal);
+            }
+            
+            // Toggle all groups button
+            const toggleAllGroupsBtn = document.getElementById('toggle-all-groups');
+            if (toggleAllGroupsBtn) {
+                toggleAllGroupsBtn.addEventListener('click', toggleAllEquipmentGroups);
             }
             
             
@@ -2046,7 +2126,6 @@
                 nextPageBtn.disabled = currentPage === totalPages;
                 clearSelectionsBtn.disabled = false;
                 exportDataBtn.disabled = false;
-                extractAllBtn.disabled = extractions.length === 0;
                 zoomInBtn.disabled = false;
                 zoomOutBtn.disabled = false;
                 updateZoomControls();
@@ -3227,8 +3306,6 @@
                 updateExtractionList();
                 saveToLocalStorage();
                 
-                // Update Extract All button state
-                extractAllBtn.disabled = extractions.length === 0;
                 
                 // Refresh the display to show the updated rectangle
                 restoreSelectionsForPage(currentPage);
@@ -3858,12 +3935,16 @@
             // Update Delete All button visibility
             const deleteAllBtn = document.getElementById('delete-all-extractions');
             const manageAllBtn = document.getElementById('manage-all');
+            const toggleAllGroupsBtn = document.getElementById('toggle-all-groups');
             const exportLocalBtn = document.getElementById('export-local');
             if (deleteAllBtn) {
                 deleteAllBtn.style.display = extractions.length > 0 ? 'inline-block' : 'none';
             }
             if (manageAllBtn) {
                 manageAllBtn.style.display = extractions.length > 0 ? 'inline-block' : 'none';
+            }
+            if (toggleAllGroupsBtn) {
+                toggleAllGroupsBtn.style.display = extractions.length > 0 ? 'inline-block' : 'none';
             }
             // Update Export to PDF Folder button visibility
             if (exportLocalBtn) {
@@ -3922,18 +4003,34 @@
             equipmentOrder.forEach(equipmentType => {
                 if (!grouped[equipmentType] || grouped[equipmentType].length === 0) return;
                 
-                // Create group header
+                // Create group header with toggle
                 const groupHeader = document.createElement('div');
-                groupHeader.style.cssText = `
-                    font-weight: bold;
-                    margin-top: 15px;
-                    margin-bottom: 8px;
-                    padding: 5px;
-                    background: linear-gradient(to right, ${getEquipmentTypeColorCSS(equipmentType)}, transparent);
-                    border-left: 3px solid ${getEquipmentTypeBorderColor(equipmentType)};
-                `;
-                groupHeader.textContent = `${equipmentType} (${grouped[equipmentType].length})`;
+                groupHeader.className = 'equipment-group-header';
+                groupHeader.style.background = `linear-gradient(to right, ${getEquipmentTypeColorCSS(equipmentType)}, transparent)`;
+                groupHeader.style.borderLeft = `3px solid ${getEquipmentTypeBorderColor(equipmentType)}`;
+                groupHeader.dataset.equipmentType = equipmentType;
+                
+                const headerText = document.createElement('span');
+                headerText.textContent = `${equipmentType} (${grouped[equipmentType].length})`;
+                
+                const toggleIcon = document.createElement('span');
+                toggleIcon.className = 'equipment-group-toggle';
+                toggleIcon.textContent = '▼';
+                
+                groupHeader.appendChild(headerText);
+                groupHeader.appendChild(toggleIcon);
+                
+                // Add click handler for collapsing/expanding
+                groupHeader.addEventListener('click', () => {
+                    toggleEquipmentGroup(equipmentType);
+                });
+                
                 extractionList.appendChild(groupHeader);
+                
+                // Create container for group items
+                const groupItemsContainer = document.createElement('div');
+                groupItemsContainer.className = 'equipment-group-items';
+                groupItemsContainer.dataset.equipmentType = equipmentType;
                 
                 // Add items in this group
                 grouped[equipmentType].forEach(extraction => {
@@ -3987,11 +4084,124 @@
                         removeHoverHighlight(extraction.id);
                     });
                     
-                    extractionList.appendChild(item);
+                    groupItemsContainer.appendChild(item);
                 });
+                
+                // Append the group items container to the extraction list
+                extractionList.appendChild(groupItemsContainer);
+                
+                // Check if this group should be collapsed (load from localStorage)
+                const isCollapsed = getEquipmentGroupCollapsedState(equipmentType);
+                if (isCollapsed) {
+                    groupItemsContainer.classList.add('collapsed');
+                    toggleIcon.classList.add('collapsed');
+                    toggleIcon.textContent = '▶';
+                }
             });
             
             console.timeEnd('Update Extraction List DOM');
+        }
+
+        // ============================================================
+        // EQUIPMENT GROUP COLLAPSIBLE FUNCTIONALITY
+        // ============================================================
+
+        function toggleEquipmentGroup(equipmentType) {
+            const groupItems = document.querySelector(`.equipment-group-items[data-equipment-type="${equipmentType}"]`);
+            const toggleIcon = document.querySelector(`.equipment-group-header[data-equipment-type="${equipmentType}"] .equipment-group-toggle`);
+            
+            if (groupItems && toggleIcon) {
+                const isCurrentlyCollapsed = groupItems.classList.contains('collapsed');
+                
+                if (isCurrentlyCollapsed) {
+                    // Expand the group
+                    groupItems.classList.remove('collapsed');
+                    toggleIcon.classList.remove('collapsed');
+                    toggleIcon.textContent = '▼';
+                    saveEquipmentGroupCollapsedState(equipmentType, false);
+                } else {
+                    // Collapse the group
+                    groupItems.classList.add('collapsed');
+                    toggleIcon.classList.add('collapsed');
+                    toggleIcon.textContent = '▶';
+                    saveEquipmentGroupCollapsedState(equipmentType, true);
+                }
+            }
+        }
+
+        function getEquipmentGroupCollapsedState(equipmentType) {
+            const savedState = localStorage.getItem('equipmentGroupCollapsed');
+            if (savedState) {
+                try {
+                    const collapsedGroups = JSON.parse(savedState);
+                    return collapsedGroups[equipmentType] === true;
+                } catch (error) {
+                    console.warn('Error reading collapsed state:', error);
+                }
+            }
+            return false; // Default to expanded
+        }
+
+        function saveEquipmentGroupCollapsedState(equipmentType, isCollapsed) {
+            let collapsedGroups = {};
+            const savedState = localStorage.getItem('equipmentGroupCollapsed');
+            if (savedState) {
+                try {
+                    collapsedGroups = JSON.parse(savedState);
+                } catch (error) {
+                    console.warn('Error reading collapsed state:', error);
+                }
+            }
+            
+            if (isCollapsed) {
+                collapsedGroups[equipmentType] = true;
+            } else {
+                delete collapsedGroups[equipmentType];
+            }
+            
+            localStorage.setItem('equipmentGroupCollapsed', JSON.stringify(collapsedGroups));
+        }
+
+        function toggleAllEquipmentGroups() {
+            const allGroupHeaders = document.querySelectorAll('.equipment-group-header');
+            const allGroupItems = document.querySelectorAll('.equipment-group-items');
+            const toggleAllBtn = document.getElementById('toggle-all-groups');
+            
+            if (allGroupHeaders.length === 0) return;
+            
+            // Check if any group is expanded (not collapsed)
+            const hasExpandedGroup = Array.from(allGroupItems).some(items => !items.classList.contains('collapsed'));
+            
+            // If any group is expanded, collapse all; otherwise expand all
+            const shouldCollapse = hasExpandedGroup;
+            
+            allGroupHeaders.forEach(header => {
+                const equipmentType = header.dataset.equipmentType;
+                const groupItems = document.querySelector(`.equipment-group-items[data-equipment-type="${equipmentType}"]`);
+                const toggleIcon = header.querySelector('.equipment-group-toggle');
+                
+                if (groupItems && toggleIcon) {
+                    if (shouldCollapse) {
+                        // Collapse this group
+                        groupItems.classList.add('collapsed');
+                        toggleIcon.classList.add('collapsed');
+                        toggleIcon.textContent = '▶';
+                        saveEquipmentGroupCollapsedState(equipmentType, true);
+                    } else {
+                        // Expand this group
+                        groupItems.classList.remove('collapsed');
+                        toggleIcon.classList.remove('collapsed');
+                        toggleIcon.textContent = '▼';
+                        saveEquipmentGroupCollapsedState(equipmentType, false);
+                    }
+                }
+            });
+            
+            // Update toggle all button appearance
+            if (toggleAllBtn) {
+                toggleAllBtn.textContent = shouldCollapse ? '📂' : '📁';
+                toggleAllBtn.title = shouldCollapse ? 'Expand All Groups' : 'Collapse All Groups';
+            }
         }
 
         function highlightExtraction(extraction) {
@@ -4621,8 +4831,6 @@
                 updateExtractionList();
                 saveToLocalStorage();
                 
-                // Update button states
-                extractAllBtn.disabled = extractions.length === 0;
                 
                 // Update Delete All button visibility
                 const deleteAllBtn = document.getElementById('delete-all-extractions');
@@ -4682,7 +4890,6 @@
                 // Update button states
                 if (clearSelectionsBtn) clearSelectionsBtn.disabled = true;
                 if (exportDataBtn) exportDataBtn.disabled = true;
-                if (extractAllBtn) extractAllBtn.disabled = true;
                 document.getElementById('delete-all-extractions').style.display = 'none';
                 
                 setStatus(`Deleted all ${totalExtractions} extraction${totalExtractions !== 1 ? 's' : ''}`);
@@ -4734,6 +4941,23 @@
                 width: coords.width * currentDisplayScale,
                 height: coords.height * currentDisplayScale
             };
+        }
+
+        function updateRectangleColors() {
+            // Update colors for all existing rectangle overlays
+            const savedRects = document.querySelectorAll('.saved-rect');
+            savedRects.forEach(rect => {
+                const extractionId = rect.dataset.extractionId;
+                const extraction = extractions.find(e => e.id === extractionId);
+                if (extraction) {
+                    const equipmentType = extraction.equipmentType || extraction.type || 'OTHER';
+                    // Update class name to trigger color changes
+                    rect.className = `saved-rect equipment-type-${equipmentType}`;
+                    if (selectedExtractionId === extractionId) {
+                        rect.classList.add('selected');
+                    }
+                }
+            });
         }
 
 
@@ -4788,18 +5012,96 @@
             };
         }
 
+        // ============================================================
+        // DYNAMIC EQUIPMENT COLOR SYSTEM
+        // ============================================================
+
+        // Color pool for auto-assignment to new equipment types
+        const equipmentColorPool = [
+            '#f39c12', '#1abc9c', '#8e44ad', '#e91e63', '#ff6b35', 
+            '#4ecdc4', '#45b7d1', '#96ceb4', '#fcea2b', '#ff9ff3',
+            '#fd79a8', '#00b894', '#fdcb6e', '#6c5ce7', '#a29bfe'
+        ];
+
+        let generatedEquipmentColors = {}; // Cache for generated colors
+        let injectedStyles = new Set(); // Track injected CSS classes
+
         function getEquipmentTypeColor(equipmentType) {
-            const colors = {
-                'FANS': { r: 0.16, g: 0.68, b: 0.38 },     // Green
-                'VAV': { r: 0.90, g: 0.49, b: 0.13 },      // Orange  
-                'GRD': { r: 0.61, g: 0.35, b: 0.71 },      // Purple
-                'RTU': { r: 0.16, g: 0.50, b: 0.73 },      // Blue
-                'AHU': { r: 0.89, g: 0.20, b: 0.29 },      // Red
-                'DUCTING': { r: 0.20, g: 0.59, b: 0.86 },  // Light Blue
-                'OTHER': { r: 0.58, g: 0.65, b: 0.65 },    // Gray
-                'UNKNOWN': { r: 0.58, g: 0.65, b: 0.65 }   // Gray
+            // First try to get from config/settings
+            const settings = window.settingsManager ? window.settingsManager.getSettings() : null;
+            if (settings && settings.uiSettings && settings.uiSettings.equipment && settings.uiSettings.equipment[equipmentType]) {
+                const configColor = settings.uiSettings.equipment[equipmentType].color;
+                return hexToRgbObject(configColor);
+            }
+
+            // Check if we've already generated a color for this equipment type
+            if (generatedEquipmentColors[equipmentType]) {
+                return hexToRgbObject(generatedEquipmentColors[equipmentType]);
+            }
+
+            // Generate new color for unknown equipment type
+            const newColor = generateEquipmentColor(equipmentType);
+            generatedEquipmentColors[equipmentType] = newColor;
+            
+            // Inject CSS class for this equipment type
+            injectEquipmentCSS(equipmentType, newColor);
+            
+            return hexToRgbObject(newColor);
+        }
+
+        function generateEquipmentColor(equipmentType) {
+            // Use hash-based selection from color pool for consistency
+            let hash = 0;
+            for (let i = 0; i < equipmentType.length; i++) {
+                const char = equipmentType.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // Convert to 32-bit integer
+            }
+            
+            const colorIndex = Math.abs(hash) % equipmentColorPool.length;
+            return equipmentColorPool[colorIndex];
+        }
+
+        function injectEquipmentCSS(equipmentType, color) {
+            const className = `equipment-type-${equipmentType}`;
+            
+            // Don't inject if already exists
+            if (injectedStyles.has(className)) {
+                return;
+            }
+
+            const rgbColor = hexToRgb(color);
+            const css = `
+                .${className} {
+                    border-color: ${color} !important;
+                    background: rgba(${rgbColor.r}, ${rgbColor.g}, ${rgbColor.b}, 0.1) !important;
+                }
+            `;
+
+            const styleElement = document.createElement('style');
+            styleElement.textContent = css;
+            document.head.appendChild(styleElement);
+            
+            injectedStyles.add(className);
+            console.log(`Injected CSS for equipment type: ${equipmentType} with color: ${color}`);
+        }
+
+        function hexToRgb(hex) {
+            const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : { r: 127, g: 140, b: 141 }; // Default gray
+        }
+
+        function hexToRgbObject(hex) {
+            const rgb = hexToRgb(hex);
+            return {
+                r: rgb.r / 255,
+                g: rgb.g / 255,
+                b: rgb.b / 255
             };
-            return colors[equipmentType] || colors['OTHER'];
         }
         
         function getEquipmentTypeColorCSS(equipmentType) {
@@ -4816,6 +5118,19 @@
             const g = Math.round(color.g * 255);
             const b = Math.round(color.b * 255);
             return `rgb(${r}, ${g}, ${b})`;
+        }
+
+        // Initialize equipment colors from config on page load
+        function initializeEquipmentColors() {
+            const settings = window.settingsManager ? window.settingsManager.getSettings() : null;
+            if (settings && settings.equipmentTypes) {
+                // Pre-cache colors for all known equipment types
+                settings.equipmentTypes.forEach(equipmentType => {
+                    if (equipmentType.value) {
+                        getEquipmentTypeColor(equipmentType.value);
+                    }
+                });
+            }
         }
 
         // Create annotated PDF with extraction rectangles
@@ -7002,7 +7317,6 @@
                             if (nextPageBtn) nextPageBtn.disabled = (currentPage === totalPages);
                             if (clearSelectionsBtn) clearSelectionsBtn.disabled = false;
                             if (exportDataBtn) exportDataBtn.disabled = false;
-                            if (extractAllBtn) extractAllBtn.disabled = (extractions.length === 0);
                             if (zoomInBtn) zoomInBtn.disabled = false;
                             if (zoomOutBtn) zoomOutBtn.disabled = false;
                             

@@ -499,6 +499,56 @@ def health_check():
         return response
     return jsonify({'status': 'healthy', 'service': 'BlueBeam Space API'})
 
+@app.route('/api/load-api-key', methods=['GET'])
+def load_api_key():
+    """Load Gemini API key from server-side storage."""
+    try:
+        api_key_path = os.path.expanduser('~/.gemini_api_key')
+        if os.path.exists(api_key_path):
+            with open(api_key_path, 'r') as f:
+                content = f.read().strip()
+                # Skip comment lines and extract the actual key
+                lines = content.split('\n')
+                api_key = None
+                for line in lines:
+                    if not line.startswith('#') and line.strip():
+                        api_key = line.strip()
+                        break
+                
+                if api_key and api_key != 'YOUR_API_KEY_HERE':
+                    return jsonify({'apiKey': api_key})
+        
+        return jsonify({'apiKey': None})
+    except Exception as e:
+        print(f"Error loading API key: {str(e)}", flush=True)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/save-api-key', methods=['POST'])
+def save_api_key():
+    """Save Gemini API key to server-side storage."""
+    try:
+        data = request.json
+        api_key = data.get('apiKey')
+        
+        if not api_key:
+            return jsonify({'error': 'No API key provided'}), 400
+        
+        api_key_path = os.path.expanduser('~/.gemini_api_key')
+        
+        # Write the API key to file
+        with open(api_key_path, 'w') as f:
+            f.write(f"# Gemini API Key Storage\n")
+            f.write(f"# This file is automatically managed by the PDF Extractor application\n")
+            f.write(f"{api_key}\n")
+        
+        # Set secure permissions
+        os.chmod(api_key_path, 0o600)
+        
+        return jsonify({'success': True, 'message': 'API key saved successfully'})
+    except Exception as e:
+        print(f"Error saving API key: {str(e)}", flush=True)
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/favicon.ico')
 def favicon():
     """Return empty favicon to prevent 404 errors."""
