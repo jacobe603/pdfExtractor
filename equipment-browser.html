@@ -11,192 +11,19 @@
     <!-- ZIP File Support for loading exports -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     
+    <!-- Shared Styles -->
+    <link rel="stylesheet" href="shared-styles.css">
+    
+    <!-- Shared Utilities -->
+    <script src="shared-utils.js"></script>
+    
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f5f5f5;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
+        /* Equipment Browser Specific Styles */
         .toolbar {
-            background: #2c3e50;
-            color: white;
-            padding: 10px 20px;
-            display: flex;
-            align-items: center;
             justify-content: space-between;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
-        .toolbar-left {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .toolbar h1 {
-            font-size: 1.2em;
-            font-weight: 600;
-        }
-
-        .btn {
-            background: #27ae60;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background 0.3s;
-            text-decoration: none;
-            display: inline-block;
-        }
-
-        .btn:hover {
-            background: #219a52;
-        }
-
-        .btn.secondary {
-            background: #3498db;
-        }
-
-        .btn.secondary:hover {
-            background: #2980b9;
-        }
-
-        .main-container {
-            display: flex;
-            flex: 1;
-            overflow: hidden;
-        }
-
-        .equipment-sidebar {
-            width: 250px;
-            background: white;
-            border-right: 1px solid #dee2e6;
-            padding: 15px;
-            overflow-y: auto;
-            box-shadow: 2px 0 4px rgba(0,0,0,0.1);
-        }
-
-        .equipment-sidebar h3 {
-            color: #2c3e50;
-            margin-bottom: 15px;
-            font-size: 1.1em;
-        }
-
-        .equipment-filter {
-            margin-bottom: 15px;
-        }
-
-        .equipment-type {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 10px;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: background 0.2s;
-            margin-bottom: 5px;
-            border: 1px solid #e9ecef;
-        }
-
-        .equipment-type:hover {
-            background: #f8f9fa;
-        }
-
-        .equipment-type.active {
-            background: #e3f2fd;
-            border-color: #2196f3;
-            color: #1976d2;
-        }
-
-        .equipment-label {
-            font-weight: 500;
-        }
-
-        .equipment-count {
-            background: #6c757d;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 0.8em;
-            min-width: 20px;
-            text-align: center;
-        }
-
-        .equipment-type.active .equipment-count {
-            background: #1976d2;
-        }
-
-        .content-area {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-
-        .content-header {
-            background: white;
-            padding: 15px 20px;
-            border-bottom: 1px solid #dee2e6;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 15px;
-        }
-
-        .search-bar {
-            flex: 1;
-            max-width: 500px;
-        }
-
-        .search-input {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #ddd;
-            border-radius: 6px;
-            font-size: 14px;
-            transition: border-color 0.3s;
-        }
-
-        .search-input:focus {
-            outline: none;
-            border-color: #3498db;
-        }
-
-        .view-controls {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-        }
-
-        .view-toggle {
-            display: flex;
-            border: 1px solid #dee2e6;
-            border-radius: 6px;
-            overflow: hidden;
-        }
-
-        .view-toggle button {
-            background: white;
-            border: none;
-            padding: 8px 12px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .view-toggle button.active {
-            background: #3498db;
-            color: white;
-        }
+        /* Removed - using shared styles */
 
         .extractions-grid {
             flex: 1;
@@ -294,70 +121,14 @@
             overflow-y: auto;
         }
 
+        /* Base extraction card - using shared styles with customizations */
         .extraction-card {
-            background: white;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            display: flex;
-            flex-direction: column;
             height: 100%; /* Fill available grid space */
             min-height: 300px;
         }
 
-        .extraction-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-            border-color: #3498db;
-        }
-
         .extraction-thumbnail {
-            width: 100%;
-            background: #f8f9fa;
-            background-image: 
-                linear-gradient(45deg, #ffffff 25%, transparent 25%), 
-                linear-gradient(-45deg, #ffffff 25%, transparent 25%), 
-                linear-gradient(45deg, transparent 75%, #ffffff 75%), 
-                linear-gradient(-45deg, transparent 75%, #ffffff 75%);
-            background-size: 20px 20px;
-            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
-            border-radius: 6px;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
             min-height: 200px; /* Fallback minimum */
-            border: 1px solid #e9ecef;
-        }
-
-        .extraction-thumbnail img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain; /* Show full image without cropping */
-            object-position: center;
-            background: white; /* Clean background behind transparent images */
-            border-radius: 4px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-        }
-
-        .extraction-thumbnail img:hover {
-            transform: scale(1.02);
-            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-        }
-
-        .extraction-thumbnail img[src=""],
-        .extraction-thumbnail img:not([src]) {
-            display: none;
-        }
-
-        .extraction-thumbnail .placeholder {
-            color: #6c757d;
-            font-size: 14px;
-            text-align: center;
         }
 
         /* Dynamic thumbnail size variations using viewport units */
@@ -417,164 +188,16 @@
             flex: 1;
         }
 
-        .extraction-title {
-            font-weight: 600;
-            color: #2c3e50;
-            margin-bottom: 8px;
-            font-size: 1.1em;
-        }
+        /* Removed - using shared styles */
 
-        .extraction-meta {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
-            flex-wrap: wrap;
-        }
-
-        .meta-tag {
-            background: #e9ecef;
-            color: #495057;
-            padding: 2px 8px;
-            border-radius: 12px;
-            font-size: 0.8em;
-        }
-
-        .meta-tag.equipment {
-            background: #d1ecf1;
-            color: #0c5460;
-        }
-
-        .meta-tag.type {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .extraction-preview {
-            color: #6c757d;
-            font-size: 0.9em;
-            line-height: 1.4;
-            margin-bottom: 10px;
-            display: -webkit-box;
-            -webkit-line-clamp: 3;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-
-        .extraction-actions {
-            display: flex;
-            gap: 8px;
-            margin-top: 10px;
-        }
-
-        .action-btn {
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            padding: 6px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.8em;
-            transition: all 0.2s;
-        }
-
-        .action-btn:hover {
-            background: #e9ecef;
-        }
-
-        .action-btn.primary {
-            background: #3498db;
-            color: white;
-            border-color: #3498db;
-        }
-
-        .action-btn.primary:hover {
-            background: #2980b9;
-        }
-
-        .no-results {
-            text-align: center;
-            padding: 40px 20px;
-            color: #6c757d;
-        }
-
-        .no-results h3 {
-            margin-bottom: 10px;
-        }
-
+        /* Load data section customization */
         .load-data-section {
-            text-align: center;
-            padding: 40px;
-            background: white;
-            margin: 20px;
-            border-radius: 8px;
-            border: 2px dashed #dee2e6;
-        }
-
-        .load-data-section h3 {
-            margin-bottom: 15px;
-            color: #2c3e50;
-        }
-
-        .file-input {
-            position: relative;
-            overflow: hidden;
-            display: inline-block;
             margin: 5px;
         }
 
-        .file-input input[type=file] {
-            position: absolute;
-            left: -9999px;
-        }
-
-        .file-input label {
-            background: #3498db;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: background 0.3s;
-            display: inline-block;
-        }
-
-        .file-input label:hover {
-            background: #2980b9;
-        }
-
-        .status-bar {
-            background: #2c3e50;
-            color: white;
-            padding: 8px 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 0.9em;
-        }
-
-        .server-status {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .status-indicator {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: #e74c3c;
-        }
-
-        .status-indicator.online {
-            background: #27ae60;
-        }
-
-        /* Responsive design */
+        /* Equipment Browser responsive overrides */
         @media (max-width: 768px) {
-            .main-container {
-                flex-direction: column;
-            }
-            
             .equipment-sidebar {
-                width: 100%;
                 max-height: 150px; /* Reduced to give more space to content */
             }
             
@@ -606,11 +229,6 @@
             /* Mobile card optimization */
             .extraction-card {
                 min-height: calc(100vh - 280px) !important;
-            }
-            
-            .content-header {
-                flex-direction: column;
-                gap: 10px;
             }
         }
     </style>
@@ -728,13 +346,17 @@
                 
                 <div id="tab-ocr" class="tab-content">
                     <div class="ocr-text-container">
-                        <h4>Raw OCR Text</h4>
-                        <div class="ocr-text-box">
-                            <pre id="modal-ocr-text">No OCR text available</pre>
+                        <div class="ocr-controls" style="margin-bottom: 15px;">
+                            <label style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="format-toggle" onchange="toggleOCRFormat(this.checked)">
+                                <span>Show as formatted table</span>
+                            </label>
                         </div>
-                        <h4>Table Data</h4>
-                        <div id="modal-table-data" class="table-data-container">
-                            No table data available
+                        <div id="modal-ocr-content" class="ocr-content-display">
+                            No OCR content available
+                        </div>
+                        <div id="modal-notes-section" class="notes-section" style="margin-top: 20px;">
+                            <!-- Notes will be populated here -->
                         </div>
                     </div>
                 </div>
@@ -996,6 +618,73 @@
             background: #f9f9f9;
         }
 
+        /* OCR Content Display Styles */
+        .ocr-table-container {
+            margin: 15px 0;
+        }
+
+        .ocr-table-container table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .ocr-table-container th,
+        .ocr-table-container td {
+            border: 1px solid #dee2e6;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .ocr-table-container th {
+            background: #f8f9fa;
+            font-weight: 600;
+        }
+
+        .ocr-table-container tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+
+        .raw-markdown {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 15px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 14px;
+            max-height: 400px;
+            overflow: auto;
+        }
+
+        .notes-section ul.notes-list {
+            background: #e8f5e8;
+            border: 1px solid #c3e6c3;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 10px 0;
+            list-style-type: none;
+            padding-left: 20px;
+        }
+
+        .notes-section ul.notes-list li {
+            margin: 8px 0;
+            padding-left: 0;
+            position: relative;
+        }
+
+        .notes-section ul.notes-list li::before {
+            content: "📌";
+            position: absolute;
+            left: -18px;
+            top: 0;
+        }
+
+        .notes-section h4 {
+            color: #2d5a2d;
+            margin-bottom: 10px;
+        }
+
         /* SPEC Drop Zone Styles */
         .spec-drop-zone {
             margin-top: 20px;
@@ -1053,20 +742,191 @@
         let viewMode = 'grid';
         let serverAvailable = false;
         let equipmentTypes = [];
+        let currentDataSource = null; // Track current data source: 'folder', 'server', 'localStorage'
 
         // File management for dragged folders
         let draggedFiles = new Map(); // Map: relative_path -> File object
         let fileObjectUrls = new Map(); // Map: relative_path -> object_url
+        let loadingInProgress = false; // Flag to prevent duplicate loads
 
-        // Dynamic server URL detection (same as main application)
-        function getServerUrl() {
-            return `http://${window.location.hostname}:5000`;
+        // Path normalization helper functions
+        function extractRelativePath(webkitRelativePath) {
+            // Extract the part after the first folder
+            // e.g. "exported_data/KITCHEN EXHAUST/image.png" -> "KITCHEN EXHAUST/image.png"
+            const parts = webkitRelativePath.split('/');
+            if (parts.length > 1) {
+                return parts.slice(1).join('/');
+            }
+            return webkitRelativePath;
         }
-        const SERVER_URL = getServerUrl();
+
+        function getPathVariations(path) {
+            // Return all possible path variations for lookup
+            const variations = [path];
+            
+            // Add version without leading folder if it exists
+            const relativePath = extractRelativePath(path);
+            if (relativePath !== path) {
+                variations.push(relativePath);
+            }
+            
+            // Add just the filename
+            const filename = path.split('/').pop();
+            if (filename !== path && filename !== relativePath) {
+                variations.push(filename);
+            }
+            
+            return variations;
+        }
+
+        function findObjectUrl(imagePath) {
+            // Try to find object URL with different path variations
+            const variations = getPathVariations(imagePath);
+            
+            for (const variation of variations) {
+                const objectUrl = fileObjectUrls.get(variation);
+                if (objectUrl) {
+                    console.log(`Found object URL for "${imagePath}" using variation "${variation}"`);
+                    return objectUrl;
+                }
+            }
+            
+            console.log(`No object URL found for "${imagePath}", tried:`, variations);
+            return null;
+        }
+
+        // Escape HTML to prevent XSS (from standalone HTML)
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Convert markdown table to HTML table (from standalone HTML)
+        function convertMarkdownToTable(markdown) {
+            if (!markdown || typeof markdown !== 'string') return null;
+            
+            const lines = markdown.trim().split('\n');
+            if (lines.length < 3) return null; // Need at least header, separator, and one data row
+            
+            let tableHTML = '<table>';
+            let headerProcessed = false;
+            let inTableBody = false;
+            
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                
+                // Skip empty lines
+                if (!trimmedLine) continue;
+                
+                // Skip separator lines (contains only |, -, and spaces)
+                if (/^[\|\-\s]+$/.test(trimmedLine)) {
+                    if (headerProcessed && !inTableBody) {
+                        tableHTML += '</thead><tbody>';
+                        inTableBody = true;
+                    }
+                    continue;
+                }
+                
+                // Process table rows
+                if (trimmedLine.includes('|')) {
+                    // Split by | and clean up
+                    let cells = trimmedLine.split('|').map(cell => cell.trim());
+                    
+                    // Remove empty cells at the beginning and end
+                    if (cells[0] === '') cells.shift();
+                    if (cells[cells.length - 1] === '') cells.pop();
+                    
+                    if (cells.length > 0) {
+                        if (!headerProcessed) {
+                            // Process header row
+                            tableHTML += '<thead><tr>';
+                            cells.forEach(cell => {
+                                tableHTML += `<th>${escapeHtml(cell)}</th>`;
+                            });
+                            tableHTML += '</tr>';
+                            headerProcessed = true;
+                        } else if (inTableBody) {
+                            // Process data row
+                            tableHTML += '<tr>';
+                            cells.forEach(cell => {
+                                tableHTML += `<td>${escapeHtml(cell)}</td>`;
+                            });
+                            tableHTML += '</tr>';
+                        }
+                    }
+                }
+            }
+            
+            // Close table structure
+            if (inTableBody) {
+                tableHTML += '</tbody>';
+            } else if (headerProcessed) {
+                tableHTML += '</thead>';
+            }
+            tableHTML += '</table>';
+            
+            return headerProcessed ? tableHTML : null;
+        }
+
+        // Display OCR content with format toggle (from standalone HTML)
+        function displayOCRContent(ocrData, container, showFormatted) {
+            if (!ocrData) return '';
+            
+            let content = '';
+            
+            if (showFormatted && ocrData.markdown && (ocrData.tableData?.isTable || ocrData.isTable)) {
+                // Show as formatted HTML table
+                const tableHTML = convertMarkdownToTable(ocrData.markdown);
+                if (tableHTML) {
+                    content = `<div class="ocr-table-container">${tableHTML}</div>`;
+                } else {
+                    // Fallback to raw markdown
+                    content = `<div class="raw-markdown">${escapeHtml(ocrData.markdown)}</div>`;
+                }
+            } else if (ocrData.markdown || ocrData.rawText || ocrData.text) {
+                // Show as raw markdown/text
+                const textContent = ocrData.markdown || ocrData.rawText || ocrData.text || 'No content available';
+                content = `<div class="raw-markdown">${escapeHtml(textContent)}</div>`;
+            }
+            
+            return content;
+        }
+
+        // Toggle OCR format display
+        function toggleOCRFormat(showFormatted) {
+            const ocrContentEl = document.getElementById('modal-ocr-content');
+            const extraction = ocrContentEl.extractionData;
+            
+            if (extraction && extraction.ocrData) {
+                const content = displayOCRContent(extraction.ocrData, ocrContentEl, showFormatted);
+                ocrContentEl.innerHTML = content || 'No OCR content available';
+            }
+        }
+
+        // Initialize API utilities with configuration
+        let SERVER_URL = '';
+        async function initializeApiConfig() {
+            try {
+                // Initialize settings manager first
+                const settings = await window.settingsManager.init();
+                ApiUtils.init(settings);
+                SERVER_URL = ApiUtils.getServerUrl();
+                return true;
+            } catch (error) {
+                console.error('Failed to initialize API config:', error);
+                // Fallback to hardcoded values
+                SERVER_URL = `http://${window.location.hostname}:5000`;
+                return false;
+            }
+        }
 
         // Initialize the application
         document.addEventListener('DOMContentLoaded', async function() {
             console.log('Equipment Browser initialized');
+            
+            // Initialize API configuration
+            await initializeApiConfig();
             
             // Initialize settings
             await initializeSettings();
@@ -1081,13 +941,14 @@
             // Cleanup on page unload to prevent memory leaks
             window.addEventListener('beforeunload', clearFileObjects);
             
-            // Try to load data from localStorage first
-            tryLoadFromLocalStorage();
+            // Don't automatically load localStorage - let user choose data source
+            // tryLoadFromLocalStorage() will only be called as fallback if needed
         });
 
         async function initializeSettings() {
             try {
-                const settings = await window.settingsManager.init();
+                // Settings already initialized in initializeApiConfig, just get them
+                const settings = window.settingsManager.getSettings();
                 equipmentTypes = settings.equipmentTypes || [];
                 renderEquipmentTypes();
             } catch (error) {
@@ -1155,24 +1016,18 @@
 
         async function checkServerStatus() {
             try {
-                // Create an AbortController for timeout
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                const isHealthy = await ApiUtils.checkServerHealth();
                 
-                const response = await fetch(`${SERVER_URL}/api/health`, { 
-                    method: 'GET',
-                    mode: 'cors',
-                    signal: controller.signal
-                });
+                if (isHealthy) {
+                    const response = await ApiUtils.fetchWithTimeout(ApiUtils.buildApiUrl('health'));
                 
-                clearTimeout(timeoutId);
-                
-                if (response.ok) {
-                    const data = await response.json();
-                    serverAvailable = data.status === 'healthy';
-                    updateServerStatus(serverAvailable, serverAvailable ? 'Server online' : 'Server unhealthy');
-                } else {
-                    throw new Error('Server not responding');
+                    if (response.ok) {
+                        const data = await response.json();
+                        serverAvailable = data.status === 'healthy';
+                        updateServerStatus(serverAvailable, serverAvailable ? 'Server online' : 'Server unhealthy');
+                    } else {
+                        throw new Error('Server not responding');
+                    }
                 }
             } catch (error) {
                 console.error('Server health check failed:', error);
@@ -1331,20 +1186,32 @@
             const card = document.createElement('div');
             card.className = 'extraction-card';
             
-            // Create thumbnail - handle both base64 images and file paths
+            // Create thumbnail - simplified approach like extraction viewer
             let thumbnailHtml;
-            if (extraction.imageData && extraction.imageData.startsWith('data:')) {
-                // Base64 image from localStorage
-                thumbnailHtml = `<img src="${extraction.imageData}" alt="Extraction thumbnail">`;
-            } else if (extraction.files && extraction.files.image && fileObjectUrls.has(extraction.files.image)) {
-                // Image file from dragged folder - use object URL
-                const imageUrl = fileObjectUrls.get(extraction.files.image);
-                thumbnailHtml = `<img src="${imageUrl}" alt="Extraction thumbnail" onerror="this.parentElement.innerHTML='<div class=\\'placeholder\\'>Image not available</div>'">`;
-            } else if (extraction.files && extraction.files.image && serverAvailable) {
-                // Image file path - serve through Flask (fallback)
-                const encodedPath = encodeURIComponent(extraction.files.image);
-                const imageUrl = `${SERVER_URL}/api/extraction-file/${encodedPath}`;
-                thumbnailHtml = `<img src="${imageUrl}" alt="Extraction thumbnail" onerror="this.parentElement.innerHTML='<div class=\\'placeholder\\'>Image not available</div>'">`;
+            let imagePath = '';
+            
+            // Get image path - handle both new and old formats
+            if (extraction.files?.image) {
+                imagePath = extraction.files.image;
+            } else if (extraction.imageData) {
+                imagePath = extraction.imageData;
+            }
+            
+            if (imagePath) {
+                if (imagePath.startsWith('data:')) {
+                    // Base64 image data
+                    thumbnailHtml = `<img src="${imagePath}" alt="Extraction thumbnail">`;
+                } else {
+                    // Check if we have an object URL for this path (folder loading)
+                    const objectUrl = findObjectUrl(imagePath);
+                    if (objectUrl) {
+                        // Use object URL for folder-loaded images
+                        thumbnailHtml = `<img src="${objectUrl}" alt="Extraction thumbnail">`;
+                    } else {
+                        // File path - try direct path first, then server fallback
+                        thumbnailHtml = `<img src="${imagePath}" alt="Extraction thumbnail" onerror="this.onerror=null; if(this.src.indexOf('/api/extraction-file/') === -1 && '${serverAvailable}' === 'true') { this.src='${SERVER_URL}/api/extraction-file/' + encodeURIComponent('${imagePath}'); } else { this.parentElement.innerHTML='<div class=\\'placeholder\\'>Image not available</div>'; }">`;
+                    }
+                }
             } else {
                 // No image available
                 thumbnailHtml = `<div class="placeholder">No preview available</div>`;
@@ -1385,9 +1252,14 @@
         }
 
         function getOCRPreview(extraction) {
-            if (extraction.ocrData && extraction.ocrData.rawText) {
-                return extraction.ocrData.rawText.substring(0, 200) + '...';
+            // Use comprehensive fallback pattern like standalone HTML
+            if (extraction.ocrData) {
+                const textContent = extraction.ocrData.markdown || extraction.ocrData.rawText || extraction.ocrData.text;
+                if (textContent) {
+                    return textContent.substring(0, 200) + '...';
+                }
             }
+            // Legacy fallback
             if (extraction.ocrText) {
                 return extraction.ocrText.substring(0, 200) + '...';
             }
@@ -1395,11 +1267,18 @@
         }
 
         function tryLoadFromLocalStorage() {
+            // Only load localStorage if no other data source is active
+            if (currentDataSource !== null) {
+                console.log(`Skipping localStorage load - already have data from ${currentDataSource}`);
+                return false;
+            }
+            
             try {
                 const stored = localStorage.getItem('pdfExtractions');
                 if (stored) {
                     const localExtractions = JSON.parse(stored);
                     if (Array.isArray(localExtractions) && localExtractions.length > 0) {
+                        currentDataSource = 'localStorage';
                         loadExtractionsData(localExtractions);
                         updateStatus(`Loaded ${localExtractions.length} extractions from current session`);
                         return true;
@@ -1431,6 +1310,7 @@
         }
 
         function clearFileObjects() {
+            console.log(`clearFileObjects called - revoking ${fileObjectUrls.size} URLs`);
             // Revoke all existing object URLs to prevent memory leaks
             fileObjectUrls.forEach((url, path) => {
                 URL.revokeObjectURL(url);
@@ -1444,21 +1324,37 @@
 
         function handleFolderLoad(event) {
             const files = Array.from(event.target.files);
+            console.log('handleFolderLoad called with', files.length, 'files');
+            
+            // Prevent duplicate processing
+            if (loadingInProgress) {
+                console.log('Load already in progress, ignoring');
+                return;
+            }
+            
+            loadingInProgress = true;
             updateStatus('Loading folder data...');
             
-            // Clear previous file mappings
-            clearFileObjects();
+            // Don't clear object URLs immediately - they might still be needed
+            // Only clear if we detect we're loading a completely different folder
+            console.log('Folder load started, keeping existing', fileObjectUrls.size, 'object URLs for now');
             
             // Store all files in our global map for direct access
             files.forEach(file => {
                 if (file.webkitRelativePath) {
                     draggedFiles.set(file.webkitRelativePath, file);
                     
-                    // Create object URLs for image files
+                    // Create object URLs for image files so browser can display them
                     if (file.type.startsWith('image/') || file.name.toLowerCase().endsWith('.png') || file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')) {
                         const objectUrl = URL.createObjectURL(file);
-                        fileObjectUrls.set(file.webkitRelativePath, objectUrl);
-                        console.log(`Created object URL for: ${file.webkitRelativePath}`);
+                        
+                        // Store object URL with multiple key formats for robust lookup
+                        const pathVariations = getPathVariations(file.webkitRelativePath);
+                        pathVariations.forEach(variation => {
+                            fileObjectUrls.set(variation, objectUrl);
+                        });
+                        
+                        console.log(`Created object URL for: ${file.webkitRelativePath} with variations:`, pathVariations);
                     }
                 }
             });
@@ -1507,6 +1403,11 @@
                     
                     console.log('Using basePath for folder browse:', basePath);
                     
+                    // Clear any existing data first - folder data takes priority
+                    extractionsData = [];
+                    filteredExtractions = [];
+                    currentDataSource = 'folder';
+                    
                     // Process data directly since we have all files locally
                     const extractions = extractFromProjectData(projectData, basePath);
                     loadExtractionsData(extractions);
@@ -1516,6 +1417,8 @@
                 } catch (error) {
                     console.error('Error parsing project data:', error);
                     updateStatus('Error loading project data');
+                } finally {
+                    loadingInProgress = false;
                 }
             };
             reader.readAsText(projectFiles[0]);
@@ -1859,12 +1762,12 @@
         }
 
         function openModal() {
-            document.getElementById('extraction-modal').style.display = 'flex';
+            ModalUtils.open('extraction-modal');
             document.body.style.overflow = 'hidden';
         }
 
         function closeModal() {
-            document.getElementById('extraction-modal').style.display = 'none';
+            ModalUtils.close('extraction-modal');
             document.body.style.overflow = 'auto';
         }
 
@@ -1889,50 +1792,102 @@
             document.getElementById('modal-page-number').textContent = 
                 extraction.pageNumber !== undefined ? `Page ${extraction.pageNumber + 1}` : 'N/A';
             
-            // Set image - handle both base64 images and file paths
+            // Set image - simplified approach like extraction viewer
             const imageEl = document.getElementById('modal-extraction-image');
-            if (extraction.imageData && extraction.imageData.startsWith('data:')) {
-                // Base64 image from localStorage
-                imageEl.src = extraction.imageData;
-                imageEl.style.display = 'block';
-            } else if (extraction.files && extraction.files.image && fileObjectUrls.has(extraction.files.image)) {
-                // Image file from dragged folder - use object URL
-                const imageUrl = fileObjectUrls.get(extraction.files.image);
-                imageEl.src = imageUrl;
-                imageEl.style.display = 'block';
-                imageEl.onerror = function() {
-                    this.style.display = 'none';
-                    console.error('Failed to load local image:', extraction.files.image);
-                };
-            } else if (extraction.files && extraction.files.image && serverAvailable) {
-                // Image file path - serve through Flask (fallback)
-                const encodedPath = encodeURIComponent(extraction.files.image);
-                const imageUrl = `${SERVER_URL}/api/extraction-file/${encodedPath}`;
-                imageEl.src = imageUrl;
-                imageEl.style.display = 'block';
-                imageEl.onerror = function() {
-                    this.style.display = 'none';
-                    this.parentElement.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 20px;">Image not available</div>';
-                };
+            let imagePath = '';
+            
+            // Get image path - handle both new and old formats
+            if (extraction.files?.image) {
+                imagePath = extraction.files.image;
+            } else if (extraction.imageData) {
+                imagePath = extraction.imageData;
+            }
+            
+            if (imagePath) {
+                if (imagePath.startsWith('data:')) {
+                    // Base64 image data
+                    imageEl.src = imagePath;
+                    imageEl.style.display = 'block';
+                } else {
+                    // Check if we have an object URL for this path (folder loading)
+                    const objectUrl = findObjectUrl(imagePath);
+                    if (objectUrl) {
+                        // Use object URL for folder-loaded images
+                        imageEl.src = objectUrl;
+                        imageEl.style.display = 'block';
+                    } else {
+                        // File path - try direct path first, then server fallback
+                        imageEl.src = imagePath;
+                        imageEl.style.display = 'block';
+                        imageEl.onerror = function() {
+                            // Try server fallback if direct path fails
+                            if (this.src.indexOf('/api/extraction-file/') === -1 && serverAvailable) {
+                                this.src = `${SERVER_URL}/api/extraction-file/${encodeURIComponent(imagePath)}`;
+                            } else {
+                                this.style.display = 'none';
+                                this.parentElement.innerHTML = '<div style="text-align: center; color: #6c757d; padding: 20px;">Image not available</div>';
+                            }
+                        };
+                    }
+                }
             } else {
                 imageEl.style.display = 'none';
             }
             
-            // Populate OCR text
-            const ocrTextEl = document.getElementById('modal-ocr-text');
-            if (extraction.ocrData && extraction.ocrData.rawText) {
-                ocrTextEl.textContent = extraction.ocrData.rawText;
+            // Populate OCR content using standalone HTML's approach
+            const ocrContentEl = document.getElementById('modal-ocr-content');
+            const formatToggle = document.getElementById('format-toggle');
+            
+            if (extraction.ocrData) {
+                // Store extraction data for toggle functionality
+                ocrContentEl.extractionData = extraction;
+                
+                // Initialize with formatted view if table is available
+                const hasTable = extraction.ocrData.markdown && (extraction.ocrData.tableData?.isTable || extraction.ocrData.isTable);
+                formatToggle.checked = hasTable; // Default to formatted if table available
+                formatToggle.disabled = !hasTable; // Disable toggle if no table
+                
+                // Display content
+                const content = displayOCRContent(extraction.ocrData, ocrContentEl, formatToggle.checked);
+                ocrContentEl.innerHTML = content || 'No OCR content available';
             } else if (extraction.ocrText) {
-                ocrTextEl.textContent = extraction.ocrText;
+                // Legacy fallback
+                formatToggle.checked = false;
+                formatToggle.disabled = true;
+                ocrContentEl.innerHTML = `<div class="raw-markdown">${escapeHtml(extraction.ocrText)}</div>`;
+                ocrContentEl.extractionData = extraction;
             } else {
-                ocrTextEl.textContent = 'No OCR text available';
+                formatToggle.checked = false;
+                formatToggle.disabled = true;
+                ocrContentEl.innerHTML = 'No OCR content available';
+                ocrContentEl.extractionData = null;
             }
             
-            // Populate table data
-            populateTableData(extraction);
+            // Populate notes in OCR tab (following standalone HTML pattern)
+            const notesSection = document.getElementById('modal-notes-section');
+            if (extraction.ocrData) {
+                const notes = extraction.ocrData.notes || extraction.ocrData.tableData?.notes;
+                const hasNotes = notes?.hasNotes && notes?.entries?.length > 0;
+                
+                if (hasNotes) {
+                    notesSection.innerHTML = `
+                        <div class="notes-section">
+                            <h4>📋 Installation Notes & Requirements (${notes.count || notes.entries.length})</h4>
+                            <ul class="notes-list">
+                                ${notes.entries.map(note => `<li>${escapeHtml(note)}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                    notesSection.style.display = 'block';
+                } else {
+                    notesSection.style.display = 'none';
+                }
+            } else {
+                notesSection.style.display = 'none';
+            }
             
-            // Populate notes
-            populateNotes(extraction);
+            // Note: Table data is now handled by displayOCRContent function
+            // Note: Notes are now handled in the OCR tab above
             
             // Populate files
             populateFiles(extraction);

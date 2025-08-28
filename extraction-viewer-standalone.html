@@ -1,0 +1,1088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extraction Viewer - PDF Schedule Extractor</title>
+    
+    <!-- Data placeholder for export injection -->
+    <script>
+        // This will be replaced during export with actual project data
+        window.EMBEDDED_PROJECT_DATA = /*DATA_PLACEHOLDER*/null;
+    </script>
+    
+    <style>
+        /* Inline all necessary styles for standalone operation */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 15px 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.3em;
+            font-weight: 600;
+        }
+
+        .project-info {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .equipment-sidebar {
+            width: 250px;
+            background: white;
+            border-right: 1px solid #dee2e6;
+            padding: 15px;
+            overflow-y: auto;
+            box-shadow: 2px 0 4px rgba(0,0,0,0.1);
+        }
+
+        .equipment-sidebar h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.1em;
+        }
+
+        .equipment-type {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+            margin-bottom: 5px;
+            border: 1px solid #e9ecef;
+        }
+
+        .equipment-type:hover {
+            background: #f8f9fa;
+        }
+
+        .equipment-type.active {
+            background: #e3f2fd;
+            border-color: #2196f3;
+        }
+
+        .equipment-count {
+            background: #6c757d;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            min-width: 20px;
+            text-align: center;
+        }
+
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* 200% Scaled Cards - Extraction Viewer Specific */
+        .extractions-grid {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            display: grid;
+            gap: 15px;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        }
+
+        .extraction-card {
+            background: white;
+            border: 1px solid #dee2e6;
+            border-radius: 12px;
+            padding: 30px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            min-height: 600px;
+        }
+
+        .extraction-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            border-color: #3498db;
+        }
+
+        .extraction-thumbnail {
+            width: 100%;
+            height: 400px;
+            background: #f8f9fa;
+            background-image: 
+                linear-gradient(45deg, #ffffff 25%, transparent 25%), 
+                linear-gradient(-45deg, #ffffff 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #ffffff 75%), 
+                linear-gradient(-45deg, transparent 75%, #ffffff 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border: 1px solid #e9ecef;
+        }
+
+        .extraction-thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            object-position: center;
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        /* 200% Scaled Text Elements */
+        .extraction-title {
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 16px;
+            font-size: 1.8em;
+        }
+
+        .extraction-meta {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .meta-tag {
+            background: #e9ecef;
+            color: #495057;
+            padding: 6px 16px;
+            border-radius: 16px;
+            font-size: 1.1em;
+        }
+
+        .meta-tag.equipment {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .meta-tag.type {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px 20px;
+            color: #6c757d;
+            grid-column: 1 / -1;
+        }
+
+        /* Full-Screen Modal Override */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 0;
+            width: 100%;
+            height: 100%;
+            max-width: none;
+            max-height: none;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .modal-header h2 {
+            margin: 0;
+            color: #2c3e50;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #6c757d;
+            line-height: 1;
+        }
+
+        .modal-body {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .extraction-image-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .extraction-image-container img {
+            max-width: 100%;
+            max-height: 70vh;
+            object-fit: contain;
+        }
+
+        .extraction-details h3 {
+            color: #2c3e50;
+            margin-bottom: 15px;
+            font-size: 1.4em;
+        }
+
+        .extraction-info {
+            margin-bottom: 25px;
+        }
+
+        .info-row {
+            display: flex;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #495057;
+            width: 150px;
+        }
+
+        .info-value {
+            color: #212529;
+            flex: 1;
+        }
+
+        .ocr-results {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .ocr-results pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+            color: #333;
+        }
+
+        /* Table formatting styles */
+        .ocr-table-container {
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+
+        .ocr-table-container table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 10px 0;
+            background: white;
+            border: 1px solid #dee2e6;
+        }
+
+        .ocr-table-container th, 
+        .ocr-table-container td {
+            border: 1px solid #dee2e6;
+            padding: 8px 12px;
+            text-align: left;
+        }
+
+        .ocr-table-container thead {
+            background: #f8f9fa;
+        }
+
+        .ocr-table-container thead th {
+            font-weight: 600;
+            color: #495057;
+            background: #e9ecef;
+        }
+
+        .ocr-table-container tbody tr:hover {
+            background: #f8f9fa;
+        }
+
+        .ocr-table-container tbody tr:nth-child(even) {
+            background: #fafafa;
+        }
+
+        /* Notes section styling */
+        .notes-section {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+
+        .notes-section h4 {
+            color: #856404;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .notes-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .notes-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #ffeaa7;
+            color: #856404;
+            line-height: 1.5;
+        }
+
+        .notes-list li:last-child {
+            border-bottom: none;
+        }
+
+        /* Format toggle */
+        .format-toggle {
+            margin: 15px 0;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 4px;
+        }
+
+        .format-toggle label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .format-toggle input[type="checkbox"] {
+            cursor: pointer;
+        }
+
+        /* OCR Metadata */
+        .ocr-metadata {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e9ecef;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #6c757d;
+        }
+
+        /* Raw markdown display */
+        .raw-markdown {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.85em;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        /* 200% Scaled File Links */
+        .file-links {
+            margin-top: 30px;
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .file-link {
+            background: #3498db;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 1.2em;
+        }
+
+        .file-link:hover {
+            background: #2980b9;
+            color: white;
+        }
+
+        /* File loading UI */
+        .file-loader {
+            background: #f8f9fa;
+            border: 2px dashed #dee2e6;
+            border-radius: 8px;
+            padding: 40px;
+            margin: 20px;
+            text-align: center;
+        }
+
+        .file-loader-content h3 {
+            color: #495057;
+            margin-bottom: 10px;
+        }
+
+        .file-loader-content p {
+            color: #6c757d;
+            margin-bottom: 20px;
+        }
+
+        .file-drop-zone {
+            background: white;
+            border: 2px dashed #007bff;
+            border-radius: 8px;
+            padding: 30px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-drop-zone:hover {
+            border-color: #0056b3;
+            background: #f8f9ff;
+        }
+
+        .file-drop-zone.dragover {
+            border-color: #28a745;
+            background: #f8fff8;
+        }
+
+        .drop-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+
+        .drop-text {
+            font-size: 18px;
+            color: #495057;
+            margin-bottom: 10px;
+        }
+
+        .drop-or {
+            color: #6c757d;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+
+        .browse-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.3s ease;
+        }
+
+        .browse-button:hover {
+            background: #0056b3;
+        }
+
+        /* Responsive design overrides */
+        @media (max-width: 768px) {
+            .main-container {
+                flex-direction: column;
+            }
+            
+            .equipment-sidebar {
+                width: 100%;
+                max-height: 150px;
+            }
+            
+            .extractions-grid {
+                grid-template-columns: 1fr;
+                gap: 10px;
+                padding: 10px;
+            }
+            
+            .extraction-thumbnail {
+                height: 250px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>PDF Schedule Extractor - Extraction Viewer</h1>
+        <div class="project-info" id="project-info">
+            <!-- Will be populated with project info -->
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="equipment-sidebar">
+            <h3>Equipment Types</h3>
+            <div id="equipment-types-list">
+                <div class="equipment-type active" data-equipment="all">
+                    <span>All Equipment</span>
+                    <span class="equipment-count" id="all-count">0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-area">
+            <div class="extractions-grid" id="extractions-grid">
+                <!-- Extraction cards will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for extraction details -->
+    <div id="extraction-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Extraction Details</h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-body">
+                <!-- Content will be populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let projectData = null;
+        let extractionsData = [];
+        let currentFilter = 'all';
+
+        // Initialize the viewer
+        document.addEventListener('DOMContentLoaded', function() {
+            loadProjectData();
+        });
+
+        async function loadProjectData() {
+            try {
+                // Priority 1: Try embedded data
+                if (window.EMBEDDED_PROJECT_DATA) {
+                    console.log('Using embedded project data');
+                    projectData = window.EMBEDDED_PROJECT_DATA;
+                    processProjectData();
+                    return;
+                }
+
+                // Priority 2: Try fetching from same directory
+                try {
+                    const response = await fetch('project_data.json');
+                    if (response.ok) {
+                        projectData = await response.json();
+                        console.log('Loaded project data from file');
+                        processProjectData();
+                        return;
+                    }
+                } catch (fetchError) {
+                    console.log('Could not fetch project_data.json:', fetchError.message);
+                }
+
+                // Priority 3: Show file loader UI
+                console.log('No project data available, showing file loader');
+                showFileLoader();
+
+            } catch (error) {
+                console.error('Error loading project data:', error);
+                showFileLoader();
+            }
+        }
+
+        // Helper function to update project info display
+        function updateProjectInfo() {
+            const infoDiv = document.getElementById('project-info');
+            if (projectData) {
+                infoDiv.innerHTML = `
+                    <strong>${projectData.project || 'Untitled Project'}</strong> - 
+                    ${projectData.totalExtractions || 0} extractions - 
+                    Exported: ${new Date(projectData.exportDate).toLocaleDateString()}
+                `;
+            } else {
+                infoDiv.innerHTML = 'No project data loaded';
+            }
+        }
+
+        function showFileLoader() {
+            const grid = document.getElementById('extractions-grid');
+            grid.innerHTML = `
+                <div class="file-loader">
+                    <div class="file-loader-content">
+                        <h3>📁 Load Project Data</h3>
+                        <p>This viewer requires project data to display extractions.</p>
+                        <p>Drag and drop your <strong>project_data.json</strong> file here, or click to browse.</p>
+                        
+                        <div class="file-drop-zone" id="file-drop-zone">
+                            <div class="drop-icon">📥</div>
+                            <div class="drop-text">Drop project_data.json here</div>
+                            <div class="drop-or">OR</div>
+                            <button class="browse-button" onclick="document.getElementById('file-input').click()">
+                                Browse Files
+                            </button>
+                            <input type="file" id="file-input" accept=".json" style="display: none;">
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            setupFileLoader();
+        }
+
+        function setupFileLoader() {
+            const dropZone = document.getElementById('file-drop-zone');
+            const fileInput = document.getElementById('file-input');
+
+            if (!dropZone || !fileInput) return;
+
+            // Drag and drop handlers
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                
+                const files = e.dataTransfer.files;
+                if (files.length > 0 && files[0].name.endsWith('.json')) {
+                    loadJsonFile(files[0]);
+                }
+            });
+
+            // File input handler
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    loadJsonFile(e.target.files[0]);
+                }
+            });
+        }
+
+        function loadJsonFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    projectData = JSON.parse(e.target.result);
+                    console.log('Loaded project data from file upload');
+                    processProjectData();
+                } catch (error) {
+                    alert('Error loading JSON file: ' + error.message);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function processProjectData() {
+            if (!projectData) return;
+
+            updateProjectInfo();
+
+            // Convert equipment-grouped format to flat array
+            extractionsData = [];
+            
+            if (projectData.equipment) {
+                // New equipment-grouped format
+                for (const [equipmentType, items] of Object.entries(projectData.equipment)) {
+                    items.forEach(item => {
+                        extractionsData.push({
+                            ...item,
+                            equipmentType: item.equipmentType || equipmentType
+                        });
+                    });
+                }
+            } else if (projectData.extractions) {
+                // Legacy flat format
+                extractionsData = projectData.extractions;
+            }
+
+            renderEquipmentTypes();
+            renderExtractions();
+        }
+
+        function renderEquipmentTypes() {
+            const container = document.getElementById('equipment-types-list');
+            
+            // Clear existing types except "All"
+            const allOption = container.querySelector('[data-equipment="all"]');
+            const equipmentTypes = container.querySelectorAll('[data-equipment]:not([data-equipment="all"])');
+            equipmentTypes.forEach(el => el.remove());
+
+            // Update "All" count
+            document.getElementById('all-count').textContent = extractionsData.length;
+
+            // Get unique equipment types
+            const types = [...new Set(extractionsData.map(e => e.equipmentType))].sort();
+            
+            types.forEach(type => {
+                const count = extractionsData.filter(e => e.equipmentType === type).length;
+                const div = document.createElement('div');
+                div.className = 'equipment-type';
+                div.dataset.equipment = type;
+                div.innerHTML = `
+                    <span>${type}</span>
+                    <span class="equipment-count">${count}</span>
+                `;
+                div.addEventListener('click', () => filterByEquipment(type));
+                container.appendChild(div);
+            });
+
+            // Add click handler to "All"
+            allOption.onclick = () => filterByEquipment('all');
+        }
+
+        function filterByEquipment(equipmentType) {
+            currentFilter = equipmentType;
+            
+            // Update active state
+            const equipmentElements = document.querySelectorAll('.equipment-type');
+            equipmentElements.forEach(el => {
+                el.classList.toggle('active', el.dataset.equipment === equipmentType);
+            });
+
+            applyFilter();
+        }
+
+        function applyFilter() {
+            renderExtractions();
+        }
+
+        function renderExtractions() {
+            const grid = document.getElementById('extractions-grid');
+            grid.innerHTML = '';
+
+            const filtered = currentFilter === 'all' 
+                ? extractionsData 
+                : extractionsData.filter(e => e.equipmentType === currentFilter);
+
+            if (filtered.length === 0) {
+                grid.innerHTML = '<div class="no-results"><h3>No extractions found</h3></div>';
+                return;
+            }
+
+            filtered.forEach(extraction => {
+                const card = createExtractionCard(extraction);
+                grid.appendChild(card);
+            });
+        }
+
+        function createExtractionCard(extraction) {
+            const card = document.createElement('div');
+            card.className = 'extraction-card';
+            
+            // Get image path - handle both new and old formats
+            let imagePath = '';
+            if (extraction.files?.image) {
+                imagePath = extraction.files.image;
+            } else if (extraction.imageData) {
+                imagePath = extraction.imageData;
+            }
+
+            card.innerHTML = `
+                <div class="extraction-thumbnail">
+                    ${imagePath.startsWith('data:') 
+                        ? `<img src="${imagePath}" alt="${extraction.extractionName || extraction.name || 'Extraction'}">`
+                        : `<img src="${imagePath}" alt="${extraction.extractionName || extraction.name || 'Extraction'}" onerror="this.style.display='none'">`
+                    }
+                </div>
+                <div class="extraction-title">${extraction.extractionName || extraction.name || 'Unnamed Extraction'}</div>
+                <div class="extraction-meta">
+                    <span class="meta-tag equipment">${extraction.equipmentType || 'Unknown'}</span>
+                    <span class="meta-tag type">${extraction.extractionType || extraction.type || 'Unknown'}</span>
+                </div>
+            `;
+
+            card.addEventListener('click', () => showExtractionDetails(extraction));
+            return card;
+        }
+
+        // Convert markdown table to HTML table
+        function convertMarkdownToTable(markdown) {
+            if (!markdown || typeof markdown !== 'string') return null;
+            
+            const lines = markdown.trim().split('\n');
+            if (lines.length < 3) return null; // Need at least header, separator, and one data row
+            
+            let tableHTML = '<table>';
+            let headerProcessed = false;
+            let inTableBody = false;
+            
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                
+                // Skip empty lines
+                if (!trimmedLine) continue;
+                
+                // Skip separator lines (contains only |, -, and spaces)
+                if (/^[\|\-\s]+$/.test(trimmedLine)) {
+                    if (headerProcessed && !inTableBody) {
+                        tableHTML += '</thead><tbody>';
+                        inTableBody = true;
+                    }
+                    continue;
+                }
+                
+                // Process table rows
+                if (trimmedLine.includes('|')) {
+                    // Split by | and clean up
+                    let cells = trimmedLine.split('|').map(cell => cell.trim());
+                    
+                    // Remove empty cells at the beginning and end
+                    if (cells[0] === '') cells.shift();
+                    if (cells[cells.length - 1] === '') cells.pop();
+                    
+                    if (cells.length > 0) {
+                        if (!headerProcessed) {
+                            // Process header row
+                            tableHTML += '<thead><tr>';
+                            cells.forEach(cell => {
+                                tableHTML += `<th>${escapeHtml(cell)}</th>`;
+                            });
+                            tableHTML += '</tr>';
+                            headerProcessed = true;
+                        } else if (inTableBody) {
+                            // Process data row
+                            tableHTML += '<tr>';
+                            cells.forEach(cell => {
+                                tableHTML += `<td>${escapeHtml(cell)}</td>`;
+                            });
+                            tableHTML += '</tr>';
+                        }
+                    }
+                }
+            }
+            
+            if (inTableBody) {
+                tableHTML += '</tbody>';
+            }
+            tableHTML += '</table>';
+            
+            return tableHTML;
+        }
+
+        // Escape HTML to prevent XSS
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Display OCR content with format toggle
+        function displayOCRContent(ocrData, container, showFormatted) {
+            if (!ocrData) return '';
+            
+            let content = '';
+            
+            if (showFormatted && ocrData.markdown && (ocrData.tableData?.isTable || ocrData.isTable)) {
+                // Show as formatted HTML table
+                const tableHTML = convertMarkdownToTable(ocrData.markdown);
+                if (tableHTML) {
+                    content = `<div class="ocr-table-container">${tableHTML}</div>`;
+                } else {
+                    // Fallback to raw markdown
+                    content = `<div class="raw-markdown">${escapeHtml(ocrData.markdown)}</div>`;
+                }
+            } else if (ocrData.markdown || ocrData.rawText || ocrData.text) {
+                // Show as raw markdown/text
+                const textContent = ocrData.markdown || ocrData.rawText || ocrData.text || 'No content available';
+                content = `<div class="raw-markdown">${escapeHtml(textContent)}</div>`;
+            }
+            
+            return content;
+        }
+
+        // Toggle format for OCR display
+        function toggleOCRFormat(extractionId, checkbox) {
+            const extraction = extractionsData.find(e => e.id === extractionId);
+            if (!extraction || !extraction.ocrData) return;
+            
+            const container = document.getElementById(`ocr-content-${extractionId}`);
+            if (container) {
+                container.innerHTML = displayOCRContent(extraction.ocrData, container, checkbox.checked);
+            }
+        }
+
+        async function showExtractionDetails(extraction) {
+            const modal = document.getElementById('extraction-modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalBody = document.getElementById('modal-body');
+
+            modalTitle.textContent = extraction.extractionName || extraction.name || 'Extraction Details';
+            
+            // Generate unique ID for this extraction
+            const extractionId = extraction.id || extraction.extractionName || Math.random().toString(36).substr(2, 9);
+
+            // Get image path
+            let imagePath = '';
+            if (extraction.files?.image) {
+                imagePath = extraction.files.image;
+            } else if (extraction.imageData) {
+                imagePath = extraction.imageData;
+            }
+
+            // Build modal content
+            let content = `
+                <div class="extraction-image-container">
+                    ${imagePath ? `<img src="${imagePath}" alt="${extraction.extractionName || 'Extraction'}">` : '<p>No image available</p>'}
+                </div>
+                <div class="extraction-details">
+                    <h3>Extraction Information</h3>
+                    <div class="extraction-info">
+                        <div class="info-row">
+                            <span class="info-label">Equipment Type:</span>
+                            <span class="info-value">${extraction.equipmentType || 'N/A'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Extraction Type:</span>
+                            <span class="info-value">${extraction.extractionType || extraction.type || 'N/A'}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Page:</span>
+                            <span class="info-value">${extraction.coordinates?.page || extraction.page || 'N/A'}</span>
+                        </div>
+                        ${extraction.timestamp ? `
+                        <div class="info-row">
+                            <span class="info-label">Created:</span>
+                            <span class="info-value">${new Date(extraction.timestamp).toLocaleString()}</span>
+                        </div>
+                        ` : ''}
+                    </div>
+            `;
+
+            // Add OCR results if available
+            if (extraction.ocrData) {
+                const ocrData = extraction.ocrData;
+                const hasTable = ocrData.markdown && (ocrData.tableData?.isTable || ocrData.isTable);
+                const notes = ocrData.notes || ocrData.tableData?.notes;
+                const hasNotes = notes?.hasNotes && notes?.entries?.length > 0;
+                
+                content += `
+                    <h3>OCR Results</h3>
+                `;
+                
+                // Add format toggle if we have table data
+                if (hasTable) {
+                    content += `
+                        <div class="format-toggle">
+                            <label>
+                                <input type="checkbox" checked onchange="toggleOCRFormat('${extractionId}', this)">
+                                Show as formatted table (uncheck for raw markdown)
+                            </label>
+                        </div>
+                    `;
+                }
+                
+                // Add OCR content container
+                content += `
+                    <div id="ocr-content-${extractionId}" class="ocr-results">
+                        ${displayOCRContent(ocrData, null, true)}
+                    </div>
+                `;
+                
+                // Add notes section if available
+                if (hasNotes) {
+                    content += `
+                        <div class="notes-section">
+                            <h4>📋 Installation Notes & Requirements (${notes.count})</h4>
+                            <ul class="notes-list">
+                                ${notes.entries.map(note => `<li>${escapeHtml(note)}</li>`).join('')}
+                            </ul>
+                        </div>
+                    `;
+                }
+                
+                // Add metadata if available
+                if (ocrData.provider || ocrData.confidence) {
+                    content += `
+                        <div class="ocr-metadata">
+                            ${ocrData.provider ? `<strong>Provider:</strong> ${ocrData.provider}` : ''}
+                            ${ocrData.confidence ? ` | <strong>Confidence:</strong> ${ocrData.confidence}%` : ''}
+                            ${ocrData.debug?.processingTime ? ` | <strong>Processed:</strong> ${new Date(ocrData.debug.processingTime).toLocaleString()}` : ''}
+                        </div>
+                    `;
+                }
+            }
+
+            // Add file links if available
+            if (extraction.files) {
+                content += `
+                    <h3>Available Files</h3>
+                    <div class="file-links">
+                `;
+                
+                for (const [fileType, filePath] of Object.entries(extraction.files)) {
+                    if (filePath && fileType !== 'image') {
+                        const fileName = filePath.split('/').pop();
+                        content += `<a href="${filePath}" class="file-link" download="${fileName}">${fileType.toUpperCase()}</a>`;
+                    }
+                }
+                
+                content += '</div>';
+            }
+
+            content += '</div>';
+
+            modalBody.innerHTML = content;
+            modal.style.display = 'flex';
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('extraction-modal');
+            modal.style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('extraction-modal');
+            if (event.target === modal) {
+                closeModal();
+            }
+        }
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>

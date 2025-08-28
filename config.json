@@ -41,7 +41,77 @@
   ],
   "apiSettings": {
     "geminiModel": "gemini-2.0-flash-exp",
-    "tesseractLang": "eng"
+    "tesseractLang": "eng",
+    "serverPort": 5000,
+    "timeout": 3000,
+    "endpoints": {
+      "health": "/api/health",
+      "extractions": "/api/browse-extractions",
+      "files": "/api/extraction-file",
+      "spaces": "/api/detect_spaces",
+      "spacesFromPath": "/api/detect_spaces_from_path"
+    }
   },
-  "version": "1.0.0"
+  "uiSettings": {
+    "gridColumns": {
+      "default": "repeat(auto-fit, minmax(200px, 1fr))",
+      "filtered": {
+        "single": "1fr",
+        "double": "repeat(2, 1fr)",
+        "triple": "repeat(3, 1fr)"
+      }
+    },
+    "breakpoints": {
+      "mobile": "768px",
+      "tablet": "1024px",
+      "desktop": "1200px",
+      "wide": "1600px",
+      "ultrawide": "1920px"
+    },
+    "colors": {
+      "primary": "#3498db",
+      "secondary": "#6c757d", 
+      "success": "#27ae60",
+      "danger": "#e74c3c",
+      "warning": "#f39c12",
+      "info": "#17a2b8",
+      "light": "#f8f9fa",
+      "dark": "#2c3e50"
+    },
+    "equipment": {
+      "FANS": {
+        "color": "#3498db",
+        "icon": "🌀"
+      },
+      "VAV": {
+        "color": "#9b59b6",
+        "icon": "🎛️"
+      },
+      "RTU": {
+        "color": "#e67e22",
+        "icon": "🏠"
+      },
+      "AHU": {
+        "color": "#27ae60",
+        "icon": "🏢"
+      },
+      "GRD": {
+        "color": "#95a5a6",
+        "icon": "⬜"
+      },
+      "DUCTING": {
+        "color": "#34495e",
+        "icon": "🔄"
+      },
+      "OTHER": {
+        "color": "#7f8c8d",
+        "icon": "📋"
+      },
+      "CUSTOM": {
+        "color": "#e74c3c",
+        "icon": "⚙️"
+      }
+    }
+  },
+  "version": "1.1.0"
 }

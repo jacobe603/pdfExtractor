@@ -1323,9 +1323,41 @@ def serve_extraction_file(file_path):
         print(f"File exists: {os.path.exists(safe_path)}", flush=True)
         print(f"Is file: {os.path.isfile(safe_path) if os.path.exists(safe_path) else 'N/A'}", flush=True)
         
+        # If file doesn't exist at the direct path, try to find it in recent export directories
         if not os.path.exists(safe_path):
-            print(f"File not found: {safe_path}", flush=True)
-            return jsonify({'error': f'File not found: {safe_path}'}), 404
+            # Check if this looks like a relative path from an export directory
+            if '/' in safe_path and not os.path.isabs(safe_path):
+                print(f"Searching for relative path in recent exports: {safe_path}", flush=True)
+                
+                # Get all directories matching *_extractions_* pattern
+                import glob
+                from pathlib import Path
+                
+                # Search in current directory and common locations
+                search_patterns = [
+                    f"*_extractions_*/{safe_path}",
+                    f"../*_extractions_*/{safe_path}",
+                    f"/mnt/s/Projects/*/*_extractions_*/{safe_path}",
+                    f"/home/*/pdfExtractor*/*_extractions_*/{safe_path}"
+                ]
+                
+                found_path = None
+                for pattern in search_patterns:
+                    matches = glob.glob(pattern)
+                    if matches:
+                        # Use the most recent match
+                        found_path = max(matches, key=os.path.getmtime)
+                        print(f"Found file in export directory: {found_path}", flush=True)
+                        break
+                
+                if found_path and os.path.exists(found_path):
+                    safe_path = found_path
+                else:
+                    print(f"File not found in any export directory: {safe_path}", flush=True)
+                    return jsonify({'error': f'File not found: {safe_path}'}), 404
+            else:
+                print(f"File not found: {safe_path}", flush=True)
+                return jsonify({'error': f'File not found: {safe_path}'}), 404
             
         if not os.path.isfile(safe_path):
             print(f"Path is not a file: {safe_path}", flush=True)

@@ -334,7 +334,6 @@ class SettingsManager {
             defaultSettings: {
                 defaultEquipmentType: 'FANS',
                 defaultExtractionType: 'schedule',
-                enableTextExtraction: true,
                 autoRunOCR: false,
                 ocrProvider: 'auto'
             },
@@ -379,12 +378,6 @@ class SettingsManager {
             });
             
             extractionSelect.value = this.settings.defaultSettings.defaultExtractionType;
-        }
-        
-        // Update text extraction toggle
-        const textExtractionToggle = document.getElementById('enable-text-extraction');
-        if (textExtractionToggle) {
-            textExtractionToggle.checked = this.settings.defaultSettings.enableTextExtraction;
         }
         
         // Update OCR provider

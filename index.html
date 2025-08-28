@@ -22,59 +22,15 @@
     
     <!-- Settings Manager -->
     <script src="settings-manager.js"></script>
+    
+    <!-- Shared Styles -->
+    <link rel="stylesheet" href="shared-styles.css">
+    
+    <!-- Shared Utilities -->
+    <script src="shared-utils.js"></script>
+    
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f5f5f5;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .toolbar {
-            background: #2c3e50;
-            color: white;
-            padding: 10px 20px;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .toolbar h1 {
-            font-size: 1.2em;
-            font-weight: 600;
-        }
-
-        .file-input {
-            position: relative;
-            overflow: hidden;
-            display: inline-block;
-        }
-
-        .file-input input[type=file] {
-            position: absolute;
-            left: -9999px;
-        }
-
-        .file-input label {
-            background: #3498db;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        .file-input label:hover {
-            background: #2980b9;
-        }
+        /* PDF Viewer Specific Styles */
 
         .controls {
             display: flex;
@@ -82,25 +38,7 @@
             align-items: center;
         }
 
-        .btn {
-            background: #27ae60;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-
-        .btn:hover {
-            background: #219a52;
-        }
-
-        .btn:disabled {
-            background: #95a5a6;
-            cursor: not-allowed;
-        }
-
+        /* PDF Viewer Layout */
         .main-content {
             flex: 1;
             display: flex;
@@ -210,6 +148,7 @@
             padding: 12px;
             cursor: pointer;
             transition: all 0.3s;
+            user-select: none; /* Prevent text selection on right-click */
         }
 
         .extraction-item:hover {
@@ -233,37 +172,9 @@
             color: #6c757d;
         }
 
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .modal.show {
-            display: flex;
-        }
-
+        /* PDF Viewer modal customizations */
         .modal-content {
-            background-color: white;
-            margin: 5vh auto;
-            padding: 30px;
-            border-radius: 8px;
             width: 800px;
-            max-width: 90%;
-            max-height: 85vh;
-            overflow-y: auto;
-        }
-
-        .modal h3 {
-            margin-bottom: 20px;
-            color: #2c3e50;
         }
 
         .form-group {
@@ -293,18 +204,7 @@
             margin-top: 20px;
         }
 
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        .btn-secondary:hover {
-            background: #545b62;
-        }
+        /* Removed - using shared btn-secondary styles */
 
         .status-bar {
             background: #ecf0f1;
@@ -660,15 +560,12 @@
             <button class="btn" id="delete-all-extractions" style="background: #e74c3c; display: none;">🗑️ Delete All</button>
             <button class="btn" id="export-data" disabled>Export ZIP Package</button>
             <button class="btn" id="export-local" style="background: #16a085; display: none;">💾 Export to PDF Folder</button>
+            <button class="btn" id="batch-ocr-schedules" style="background: #f39c12; display: none;" disabled>🔄 Batch OCR Schedules</button>
             <button class="btn" id="detect-spaces" style="background: #3498db;">🔍 Detect Spaces</button>
             <button class="btn" id="import-all-spaces" style="background: #9b59b6; display: none;">📥 Import All Spaces</button>
             <button class="btn" id="toggle-spaces" style="background: #2ecc71; display: none;">👁️ Hide Spaces</button>
             <a href="#" onclick="navigateToEquipmentBrowser(); return false;" class="btn" id="equipment-browser" style="background: #8e44ad; text-decoration: none; display: inline-flex; align-items: center;">📋 Equipment Browser</a>
             <button class="btn" id="open-settings" style="background: #95a5a6; margin-left: auto;">⚙️ Settings</button>
-            <label style="font-size: 12px; color: #ecf0f1; margin-left: 10px;">
-                <input type="checkbox" id="enable-text-extraction" checked style="margin-right: 5px;">
-                Text Extraction
-            </label>
         </div>
         <div class="zoom-controls">
             <button id="zoom-out" disabled>-</button>
@@ -726,7 +623,6 @@
                 <div style="display: flex; gap: 5px; align-items: center;">
                     <button class="btn" id="edit-selected" style="font-size: 12px; padding: 6px 12px; background: #3498db; display: none;">Edit Selected</button>
                     <button class="btn" id="manage-all" style="font-size: 12px; padding: 6px 12px; background: #9b59b6; display: none;">Manage All</button>
-                    <button class="btn" id="extract-all" disabled style="font-size: 12px; padding: 6px 12px;">Extract All</button>
                 </div>
             </div>
             <div class="extraction-list" id="extraction-list">
@@ -986,6 +882,41 @@
         </div>
     </div>
 
+    <!-- Batch OCR Progress Modal -->
+    <div id="batch-ocr-modal" class="modal">
+        <div class="modal-content" style="width: 600px; max-height: 80vh;">
+            <div class="modal-header">
+                <h3 id="batch-ocr-title">Batch OCR Processing</h3>
+                <button class="modal-close" onclick="cancelBatchOCR()">&times;</button>
+            </div>
+            <div class="modal-body" style="overflow-y: auto;">
+                <div class="batch-progress-info">
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div id="batch-progress-fill" class="progress-fill"></div>
+                        </div>
+                        <div id="batch-progress-text" class="progress-text">Initializing...</div>
+                    </div>
+                    <div class="batch-stats">
+                        <span id="batch-completed">0</span> completed, 
+                        <span id="batch-failed">0</span> failed, 
+                        <span id="batch-remaining">0</span> remaining
+                    </div>
+                </div>
+                <div class="batch-items-list">
+                    <h4>Processing Queue:</h4>
+                    <div id="batch-items-container" style="max-height: 300px; overflow-y: auto;">
+                        <!-- Items will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="batch-ocr-cancel">Cancel</button>
+                <button class="btn" id="batch-ocr-close" style="display: none;">Close</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Bulk Edit Modal - REMOVED (multi-selection feature removed) -->
     <!-- Keeping Manage All Modal below for mass editing all extractions -->
     
@@ -1064,6 +995,25 @@
         </div>
     </div>
 
+    <!-- Extraction Item Context Menu -->
+    <div id="extraction-context-menu" class="context-menu" style="display: none;">
+        <div class="context-menu-item" id="ctx-edit">
+            ✏️ Edit
+        </div>
+        <div class="context-menu-item" id="ctx-download">
+            📥 Download
+        </div>
+        <div class="context-menu-item" id="ctx-run-ocr">
+            🔄 Run OCR
+        </div>
+        <div class="context-menu-item" id="ctx-view-results" style="display: none;">
+            👁️ View Results
+        </div>
+        <div class="context-menu-item" id="ctx-delete" style="color: #e74c3c;">
+            🗑️ Delete
+        </div>
+    </div>
+
     <script>
         // Initialize PDF.js
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -1115,33 +1065,6 @@
             console.log('OCR results cleared');
         }
         
-        // Extract page text content asynchronously to avoid blocking page render
-        async function extractPageTextAsync(page, pageNum) {
-            try {
-                console.time(`Page ${pageNum} Text Extraction (Async)`);
-                setStatus(`Extracting text content for page ${pageNum}...`);
-                
-                const textContent = await page.getTextContent();
-                
-                // Only update if we're still on the same page
-                if (currentPage === pageNum) {
-                    currentPageTextContent = textContent;
-                    console.log(`Page ${pageNum} text items extracted:`, textContent?.items?.length || 0);
-                    setStatus(`Page ${pageNum} ready. Text extraction complete.`);
-                } else {
-                    console.log(`Page ${pageNum} text extraction completed but page changed`);
-                }
-                
-                console.timeEnd(`Page ${pageNum} Text Extraction (Async)`);
-            } catch (error) {
-                console.error(`Error extracting text content for page ${pageNum}:`, error);
-                if (currentPage === pageNum) {
-                    currentPageTextContent = null;
-                    setStatus(`Page ${pageNum} rendered. Text extraction failed.`);
-                }
-            }
-        }
-        
         // Simple OCR management
         function processPendingOCR() {
             // No longer needed - OCR is immediate
@@ -1149,11 +1072,9 @@
         let selectedExtractionId = null;
         let editingExtractionId = null; // Track which extraction is being edited
         let currentExtractionUID = null; // Track current extraction UID for OCR isolation
-        let enableTextExtraction = true; // Setting to enable/disable text extraction for performance
         let currentZoom = 1.0;
         const zoomLevels = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
         let currentZoomIndex = 3;
-        let currentPageTextContent = null;
         let currentPDFPageHeight = 0;
         let currentRenderOperation = null;
         let renderDebounceTimer = null;
@@ -1864,7 +1785,6 @@
             totalPagesSpan = document.getElementById('total-pages');
             clearSelectionsBtn = document.getElementById('clear-selections');
             exportDataBtn = document.getElementById('export-data');
-            extractAllBtn = document.getElementById('extract-all');
             zoomInBtn = document.getElementById('zoom-in');
             zoomOutBtn = document.getElementById('zoom-out');
             zoomLevelSpan = document.getElementById('zoom-level');
@@ -1894,7 +1814,9 @@
             document.getElementById('delete-all-extractions').addEventListener('click', deleteAllExtractions);
             exportDataBtn.addEventListener('click', exportExtractions);
             document.getElementById('export-local').addEventListener('click', exportToLocalDirectory);
-            extractAllBtn.addEventListener('click', extractAllImages);
+            document.getElementById('batch-ocr-schedules').addEventListener('click', startBatchOCR);
+            document.getElementById('batch-ocr-cancel').addEventListener('click', cancelBatchOCR);
+            document.getElementById('batch-ocr-close').addEventListener('click', closeBatchOCRModal);
             zoomInBtn.addEventListener('click', zoomIn);
             zoomOutBtn.addEventListener('click', zoomOut);
             
@@ -1902,19 +1824,6 @@
             if (manageAllBtn) {
                 manageAllBtn.addEventListener('click', openManageAllModal);
             }
-            
-            // Text extraction toggle
-            document.getElementById('enable-text-extraction').addEventListener('change', function(e) {
-                enableTextExtraction = e.target.checked;
-                console.log('Text extraction', enableTextExtraction ? 'enabled' : 'disabled');
-                
-                // If we just enabled it and we're on a page without text content, extract it now
-                if (enableTextExtraction && currentPDF && !currentPageTextContent) {
-                    currentPDF.getPage(currentPage).then(page => {
-                        extractPageTextAsync(page, currentPage);
-                    });
-                }
-            });
             
             
             // Mouse wheel zoom
@@ -1926,13 +1835,21 @@
             // Hide context menu when clicking elsewhere
             document.addEventListener('click', hideContextMenu);
             document.addEventListener('contextmenu', function(e) {
-                if (!canvas.contains(e.target)) {
+                // Don't hide if right-clicking on canvas or extraction items
+                if (!canvas.contains(e.target) && !e.target.closest('.extraction-item')) {
                     hideContextMenu();
                 }
             });
             
             // Context menu item click handler
             document.getElementById('add-full-page').addEventListener('click', addFullPageToExtraction);
+            
+            // Extraction context menu handlers
+            document.getElementById('ctx-edit').addEventListener('click', handleExtractionContextMenu);
+            document.getElementById('ctx-download').addEventListener('click', handleExtractionContextMenu);
+            document.getElementById('ctx-run-ocr').addEventListener('click', handleExtractionContextMenu);
+            document.getElementById('ctx-view-results').addEventListener('click', handleExtractionContextMenu);
+            document.getElementById('ctx-delete').addEventListener('click', handleExtractionContextMenu);
             
             // BlueBeam Spaces buttons
             document.getElementById('detect-spaces').addEventListener('click', detectBlueBeamSpaces);
@@ -2198,14 +2115,6 @@
                 console.timeEnd(`Page ${pageNum} PDF Render`);
                 setStatus(`Page ${pageNum} rendered.`);
                 
-                // Extract text content asynchronously to avoid blocking page render (if enabled)
-                currentPageTextContent = null; // Clear immediately
-                if (enableTextExtraction) {
-                    extractPageTextAsync(page, pageNum);
-                } else {
-                    setStatus(`Page ${pageNum} rendered. Text extraction disabled for performance.`);
-                }
-                
                 console.time(`Page ${pageNum} Restore Selections`);
                 // Restore selections for this page
                 restoreSelectionsForPage(pageNum);
@@ -2338,6 +2247,67 @@
             const contextMenu = document.getElementById('page-context-menu');
             if (contextMenu) {
                 contextMenu.style.display = 'none';
+            }
+            
+            const extractionContextMenu = document.getElementById('extraction-context-menu');
+            if (extractionContextMenu) {
+                extractionContextMenu.style.display = 'none';
+            }
+        }
+
+        function showExtractionContextMenu(event, extraction) {
+            const contextMenu = document.getElementById('extraction-context-menu');
+            
+            // Hide any existing context menus first
+            hideContextMenu();
+            
+            // Store extraction data for menu actions
+            contextMenu.dataset.extractionId = extraction.id;
+            
+            // Show/hide menu items based on extraction state
+            const hasOCRResults = extraction.ocrData && extraction.ocrData.success;
+            const isProcessingOCR = extraction.ocrStatus === 'processing';
+            
+            document.getElementById('ctx-view-results').style.display = hasOCRResults ? 'block' : 'none';
+            document.getElementById('ctx-run-ocr').textContent = isProcessingOCR ? '⏳ Processing...' : '🔄 Run OCR';
+            document.getElementById('ctx-run-ocr').style.opacity = isProcessingOCR ? '0.5' : '1';
+            
+            // Position the menu at the mouse cursor
+            contextMenu.style.left = event.pageX + 'px';
+            contextMenu.style.top = event.pageY + 'px';
+            contextMenu.style.display = 'block';
+        }
+
+        function handleExtractionContextMenu(event) {
+            const contextMenu = document.getElementById('extraction-context-menu');
+            const extractionId = contextMenu.dataset.extractionId;
+            
+            if (!extractionId) return;
+            
+            // Hide context menu
+            hideContextMenu();
+            
+            // Route to appropriate action based on menu item clicked
+            switch (event.target.id) {
+                case 'ctx-edit':
+                    editExtraction(extractionId);
+                    break;
+                case 'ctx-download':
+                    downloadImage(extractionId);
+                    break;
+                case 'ctx-run-ocr':
+                    // Only run OCR if not currently processing
+                    const extraction = extractions.find(e => e.id === extractionId);
+                    if (extraction && extraction.ocrStatus !== 'processing') {
+                        runOCRForExtraction(extractionId);
+                    }
+                    break;
+                case 'ctx-view-results':
+                    showOCRResultsModal(extractionId);
+                    break;
+                case 'ctx-delete':
+                    deleteExtraction(extractionId);
+                    break;
             }
         }
 
@@ -2612,76 +2582,10 @@
         }
 
         function detectScheduleInfo() {
-            if (!currentPageTextContent || !currentSelection) {
-                // If text content isn't ready yet, return defaults
-                if (!currentPageTextContent) {
-                    if (!enableTextExtraction) {
-                        console.log('Text extraction disabled - auto-detection unavailable');
-                    } else {
-                        console.log('Text content not ready for auto-detection, using defaults');
-                    }
-                }
-                return { name: '', type: 'FANS', notes: '' };
-            }
-            
-            // Extract text items within or near the selection area
-            const selectionText = extractTextFromSelection(currentSelection);
-            
-            // Try to detect schedule title
-            const titleMatch = detectScheduleTitle(selectionText);
-            
-            // Try to detect equipment type
-            const equipmentType = detectEquipmentType(selectionText);
-            
-            return {
-                name: titleMatch || '',
-                type: equipmentType || 'FANS',
-                notes: ''
-            };
+            // Simplified to return defaults since we removed text extraction
+            return { name: '', type: 'OTHER', notes: '' };
         }
 
-        function extractTextFromSelection(selection) {
-            if (!currentPageTextContent) return '';
-            
-            const textItems = [];
-            const scale = 1.5; // Base scale used in rendering
-            
-            currentPageTextContent.items.forEach(item => {
-                const transform = item.transform;
-                // PDF coordinates: transform[4] = x, transform[5] = y
-                // PDF uses bottom-left origin, canvas uses top-left origin
-                const pdfX = transform[4];
-                const pdfY = transform[5];
-                
-                // Convert PDF coordinates to canvas coordinates
-                // Note: PDF y-coordinates are from bottom, canvas y-coordinates are from top
-                const canvasX = pdfX / scale;
-                const canvasY = (canvas.height / (scale * currentZoom)) - (pdfY / scale);
-                
-                // Check if text is within or near the selection bounds (in original coordinates)
-                const buffer = 30; // Allow some buffer around selection
-                if (canvasX >= selection.x - buffer && 
-                    canvasX <= selection.x + selection.width + buffer &&
-                    canvasY >= selection.y - buffer && 
-                    canvasY <= selection.y + selection.height + buffer) {
-                    textItems.push({
-                        text: item.str,
-                        x: canvasX,
-                        y: canvasY
-                    });
-                }
-            });
-            
-            // Sort by y position (top to bottom) then x position (left to right)
-            textItems.sort((a, b) => {
-                if (Math.abs(a.y - b.y) < 10) { // Same line
-                    return a.x - b.x;
-                }
-                return a.y - b.y;
-            });
-            
-            return textItems.map(item => item.text).join(' ');
-        }
 
         function detectScheduleTitle(text) {
             const titlePatterns = [
@@ -3053,8 +2957,9 @@
                                   currentName === nameInput.placeholder ||
                                   autoGenPattern.test(currentName) ||
                                   // Also update if the name contains any of the standard equipment types
-                                  ['FANS', 'VAV', 'RTU', 'GRD', 'AHU', 'DUCTING', 'CUSTOM'].some(type => 
-                                      currentName.includes(type + ' -'));
+                                  // Check if name contains any standard equipment types
+                                  (window.settingsManager ? window.settingsManager.getSetting('equipmentTypes') || [] : []).some(equipment => 
+                                      currentName.includes(equipment.value + ' -'));
             
             if (isAutoGenerated || !currentName) {
                 nameInput.value = uniqueName;
@@ -3965,6 +3870,25 @@
                 exportLocalBtn.style.display = (serverAvailable && extractions.length > 0) ? 'inline-block' : 'none';
             }
             
+            // Update Batch OCR button visibility and state
+            const batchOCRBtn = document.getElementById('batch-ocr-schedules');
+            if (batchOCRBtn) {
+                const scheduleExtractions = extractions.filter(e => (e.extractionType || e.type) === 'schedule');
+                const hasApiKey = localStorage.getItem('gemini-api-key');
+                const shouldShow = scheduleExtractions.length > 0 && hasApiKey;
+                
+                batchOCRBtn.style.display = shouldShow ? 'inline-block' : 'none';
+                
+                if (shouldShow) {
+                    // Enable only if there are schedules needing OCR
+                    const needsOCR = scheduleExtractions.some(e => !e.ocrData || e.ocrData.success === false || e.ocrStatus === 'failed');
+                    batchOCRBtn.disabled = !needsOCR;
+                    batchOCRBtn.title = needsOCR 
+                        ? `Process ${scheduleExtractions.filter(e => !e.ocrData || e.ocrData.success === false || e.ocrStatus === 'failed').length} schedule(s) with OCR`
+                        : 'All schedules already have OCR data';
+                }
+            }
+            
             if (extractions.length === 0) {
                 extractionList.innerHTML = '<p style="color: #7f8c8d; font-style: italic;">No extractions saved yet</p>';
                 console.timeEnd('Update Extraction List DOM');
@@ -3975,7 +3899,9 @@
             
             // Group extractions by equipment type
             const grouped = {};
-            const equipmentOrder = ['FANS', 'VAV', 'RTU', 'AHU', 'GRD', 'DUCTING', 'OTHER'];
+            // Get equipment order from settings
+            const equipmentTypes = window.settingsManager ? window.settingsManager.getSetting('equipmentTypes') || [] : [];
+            const equipmentOrder = equipmentTypes.map(et => et.value);
             
             extractions.forEach(extraction => {
                 const equipmentType = extraction.equipmentType || extraction.type || 'OTHER';
@@ -4038,36 +3964,18 @@
                             Page ${extraction.coordinates?.page || 'Unknown'}${extraction.isFullPage ? ' (Full Page)' : ''} • ${extraction.equipmentType || extraction.type || 'UNKNOWN'}
                             ${extraction.description || extraction.notes ? ` • ${extraction.description || extraction.notes}` : ''}
                         </div>
-                        <div style="margin-top: 5px;">
-                            <button class="btn" style="font-size: 12px; padding: 4px 8px; margin-right: 5px;" 
-                                    onclick="event.stopPropagation(); editExtraction('${extraction.id}')">
-                                Edit
-                            </button>
-                            <button class="btn" style="font-size: 12px; padding: 4px 8px; margin-right: 5px;" 
-                                    onclick="event.stopPropagation(); downloadImage('${extraction.id}')">
-                                Download
-                            </button>
-                            <button class="btn" style="font-size: 12px; padding: 4px 8px; margin-right: 5px; background: #e67e22;" 
-                                    onclick="event.stopPropagation(); runOCRForExtraction('${extraction.id}')"
-                                    ${extraction.ocrStatus === 'processing' ? 'disabled' : ''}>
-                                ${extraction.ocrStatus === 'processing' ? 'Processing...' : 'Run OCR'}
-                            </button>
-                            ${hasOCRResults ? `
-                                <button id="ocr-toggle-${extraction.id}" class="btn" style="font-size: 12px; padding: 4px 8px; margin-right: 5px; background: #27ae60;" 
-                                        onclick="event.stopPropagation(); showOCRResultsModal('${extraction.id}')">
-                                    View Results
-                                </button>
-                            ` : ''}
-                            <button class="btn-secondary" style="font-size: 12px; padding: 4px 8px;" 
-                                    onclick="event.stopPropagation(); deleteExtraction('${extraction.id}')">
-                                Delete
-                            </button>
-                        </div>
                     `;
                     
                     item.addEventListener('click', () => {
                         selectExtraction(extraction.id);
                         highlightExtraction(extraction);
+                    });
+                    
+                    // Add right-click context menu
+                    item.addEventListener('contextmenu', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        showExtractionContextMenu(e, extraction);
                     });
                     
                     // Add hover highlighting
@@ -4404,6 +4312,288 @@
             // OCR completed - results can now be viewed in modal via "View Results" button
         }
 
+        // Batch OCR functionality
+        let batchOCRState = {
+            isRunning: false,
+            canCancel: true,
+            items: [],
+            currentIndex: 0,
+            completed: 0,
+            failed: 0,
+            errors: []
+        };
+
+        async function startBatchOCR() {
+            // Validate Gemini API key
+            const savedApiKey = localStorage.getItem('gemini-api-key');
+            if (!savedApiKey || savedApiKey.trim() === '') {
+                alert('❌ Gemini API key is required for batch OCR.\n\nPlease configure your API key in Settings first.');
+                return;
+            }
+
+            // Filter for schedule extractions that don't have OCR data or have failed OCR
+            const scheduleExtractions = extractions.filter(extraction => {
+                const isSchedule = (extraction.extractionType || extraction.type) === 'schedule';
+                const needsOCR = !extraction.ocrData || extraction.ocrData.success === false || extraction.ocrStatus === 'failed';
+                return isSchedule && needsOCR;
+            });
+
+            if (scheduleExtractions.length === 0) {
+                alert('✅ No schedule extractions need OCR processing.\n\nAll schedules already have OCR data or there are no schedule extractions.');
+                return;
+            }
+
+            // Confirm with user
+            const message = `🔄 Ready to process ${scheduleExtractions.length} schedule extraction${scheduleExtractions.length === 1 ? '' : 's'} with Gemini OCR.\n\nThis will:\n• Process each schedule sequentially\n• Skip extractions that already have OCR data\n• Use the Gemini API (requires internet)\n• May take several minutes\n\nContinue?`;
+            if (!confirm(message)) {
+                return;
+            }
+
+            // Initialize batch state
+            batchOCRState = {
+                isRunning: true,
+                canCancel: true,
+                items: scheduleExtractions.map(extraction => ({
+                    id: extraction.id,
+                    name: extraction.extractionName || extraction.name || 'Unnamed Schedule',
+                    status: 'pending',
+                    extraction: extraction
+                })),
+                currentIndex: 0,
+                completed: 0,
+                failed: 0,
+                errors: []
+            };
+
+            // Show modal and start processing
+            showBatchOCRModal();
+            await processBatchOCR();
+        }
+
+        function showBatchOCRModal() {
+            const modal = document.getElementById('batch-ocr-modal');
+            const container = document.getElementById('batch-items-container');
+            
+            // Update UI
+            updateBatchProgress();
+            
+            // Populate items list
+            container.innerHTML = '';
+            batchOCRState.items.forEach(item => {
+                const itemElement = document.createElement('div');
+                itemElement.className = 'batch-item';
+                itemElement.id = `batch-item-${item.id}`;
+                itemElement.innerHTML = `
+                    <span class="batch-item-name">${item.name}</span>
+                    <span class="batch-item-status ${item.status}">${item.status.toUpperCase()}</span>
+                `;
+                container.appendChild(itemElement);
+            });
+            
+            modal.style.display = 'flex';
+        }
+
+        async function processBatchOCR() {
+            for (let i = 0; i < batchOCRState.items.length; i++) {
+                if (!batchOCRState.isRunning || !batchOCRState.canCancel) {
+                    break; // User cancelled or stopped
+                }
+
+                const item = batchOCRState.items[i];
+                batchOCRState.currentIndex = i;
+                
+                // Update progress
+                updateBatchProgress();
+                updateBatchItemStatus(item.id, 'processing');
+                
+                try {
+                    // Add delay to avoid hitting API limits
+                    if (i > 0) {
+                        await delay(2500); // 2.5 second delay between requests
+                    }
+                    
+                    // Check if still running (user might have cancelled during delay)
+                    if (!batchOCRState.isRunning) break;
+                    
+                    // Process this extraction
+                    await processSingleExtractionOCR(item.extraction, item.id);
+                    
+                } catch (error) {
+                    console.error(`Batch OCR failed for ${item.name}:`, error);
+                    batchOCRState.failed++;
+                    batchOCRState.errors.push({
+                        name: item.name,
+                        error: error.message || 'Unknown error'
+                    });
+                    updateBatchItemStatus(item.id, 'failed');
+                }
+            }
+
+            // Batch complete
+            completeBatchOCR();
+        }
+
+        async function processSingleExtractionOCR(extraction, itemId) {
+            const maxRetries = 2;
+            let lastError = null;
+            
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    // Ensure image is extracted
+                    const imageData = await ensureImageExtracted(extraction);
+                    if (!imageData) {
+                        throw new Error('Could not extract image for OCR');
+                    }
+
+                    // Get Gemini API key
+                    const savedApiKey = localStorage.getItem('gemini-api-key');
+                    const ocrOptions = {
+                        provider: 'gemini',
+                        apiKey: savedApiKey
+                    };
+
+                    // Run OCR
+                    const result = await window.OCRTableExtractor.extractTable(imageData, ocrOptions);
+                    
+                    if (result.success) {
+                        // Update extraction with OCR results
+                        extraction.ocrData = result;
+                        extraction.ocrStatus = 'completed';
+                        batchOCRState.completed++;
+                        updateBatchItemStatus(itemId, 'completed');
+                        
+                        // Save to localStorage
+                        saveToLocalStorage();
+                        return; // Success, exit retry loop
+                        
+                    } else {
+                        lastError = new Error(result.error || 'OCR processing failed');
+                        
+                        // Don't retry on API key errors or quota errors
+                        if (result.error && (result.error.includes('API key') || result.error.includes('quota') || result.error.includes('billing'))) {
+                            throw lastError;
+                        }
+                    }
+                } catch (error) {
+                    lastError = error;
+                    console.warn(`OCR attempt ${attempt}/${maxRetries} failed for ${extraction.extractionName}:`, error.message);
+                    
+                    // Don't retry on certain errors
+                    if (error.message && (error.message.includes('API key') || error.message.includes('quota') || error.message.includes('billing'))) {
+                        throw error;
+                    }
+                    
+                    // Add delay before retry (except on last attempt)
+                    if (attempt < maxRetries) {
+                        await delay(3000); // 3 second delay before retry
+                    }
+                }
+            }
+            
+            // If we get here, all retries failed
+            throw lastError || new Error('All OCR attempts failed');
+        }
+
+        function updateBatchProgress() {
+            const total = batchOCRState.items.length;
+            const processed = batchOCRState.completed + batchOCRState.failed;
+            const progress = total > 0 ? (processed / total) * 100 : 0;
+            
+            // Update progress bar
+            const progressFill = document.getElementById('batch-progress-fill');
+            const progressText = document.getElementById('batch-progress-text');
+            
+            if (progressFill) progressFill.style.width = `${progress}%`;
+            if (progressText) {
+                const current = batchOCRState.currentIndex + 1;
+                progressText.textContent = batchOCRState.isRunning 
+                    ? `Processing ${current} of ${total}...`
+                    : `Processing complete: ${batchOCRState.completed} completed, ${batchOCRState.failed} failed`;
+            }
+            
+            // Update stats
+            document.getElementById('batch-completed').textContent = batchOCRState.completed;
+            document.getElementById('batch-failed').textContent = batchOCRState.failed;
+            document.getElementById('batch-remaining').textContent = Math.max(0, total - processed);
+        }
+
+        function updateBatchItemStatus(itemId, status) {
+            const itemElement = document.getElementById(`batch-item-${itemId}`);
+            if (itemElement) {
+                const statusElement = itemElement.querySelector('.batch-item-status');
+                statusElement.textContent = status.toUpperCase();
+                statusElement.className = `batch-item-status ${status}`;
+            }
+        }
+
+        function completeBatchOCR() {
+            batchOCRState.isRunning = false;
+            updateBatchProgress();
+            updateExtractionList(); // Refresh the extraction list UI
+            
+            // Show completion buttons
+            document.getElementById('batch-ocr-cancel').style.display = 'none';
+            document.getElementById('batch-ocr-close').style.display = 'inline-block';
+            
+            // Show summary message
+            const total = batchOCRState.items.length;
+            let message = `✅ Batch OCR Complete!\n\n`;
+            message += `📊 Results:\n`;
+            message += `• ${batchOCRState.completed} schedules processed successfully\n`;
+            message += `• ${batchOCRState.failed} failed\n`;
+            message += `• ${total} total processed\n`;
+            
+            if (batchOCRState.errors.length > 0) {
+                message += `\n❌ Errors:\n`;
+                batchOCRState.errors.forEach(error => {
+                    message += `• ${error.name}: ${error.error}\n`;
+                });
+            }
+            
+            setStatus(`Batch OCR completed: ${batchOCRState.completed} success, ${batchOCRState.failed} failed`);
+            console.log('Batch OCR Summary:', message);
+        }
+
+        function cancelBatchOCR() {
+            if (batchOCRState.isRunning) {
+                if (confirm('🛑 Cancel batch OCR processing?\n\nCompleted extractions will be saved, but remaining items will be skipped.')) {
+                    batchOCRState.isRunning = false;
+                    batchOCRState.canCancel = false;
+                    setStatus('Batch OCR cancelled by user');
+                    
+                    // Mark remaining items as cancelled
+                    for (let i = batchOCRState.currentIndex + 1; i < batchOCRState.items.length; i++) {
+                        const item = batchOCRState.items[i];
+                        updateBatchItemStatus(item.id, 'pending'); // Reset to pending
+                    }
+                    
+                    completeBatchOCR();
+                }
+            } else {
+                closeBatchOCRModal();
+            }
+        }
+
+        function closeBatchOCRModal() {
+            document.getElementById('batch-ocr-modal').style.display = 'none';
+            
+            // Reset state
+            batchOCRState = {
+                isRunning: false,
+                canCancel: true,
+                items: [],
+                currentIndex: 0,
+                completed: 0,
+                failed: 0,
+                errors: []
+            };
+        }
+
+        // Utility function for delays
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
         function deleteExtraction(extractionId) {
             if (confirm('Are you sure you want to delete this schedule?')) {
                 // Find the extraction to get its spaceXref if it exists
@@ -4546,23 +4736,6 @@
             };
         }
 
-        function extractAllImages() {
-            if (extractions.length === 0) {
-                alert('No schedules to extract');
-                return;
-            }
-            
-            setStatus('Extracting all images...');
-            
-            extractions.forEach((extraction, index) => {
-                setTimeout(async () => {
-                    await downloadImage(extraction.id);
-                    if (index === extractions.length - 1) {
-                        setStatus(`All ${extractions.length} images extracted successfully`);
-                    }
-                }, index * 100); // Small delay between downloads
-            });
-        }
 
         function clearAllSelections() {
             if (confirm('Are you sure you want to clear all extracted schedules?')) {
@@ -5034,12 +5207,13 @@
                 
                 // Add standalone viewer template with embedded data
                 try {
-                    const viewerResponse = await fetch('extraction-viewer-template.html');
+                    const viewerResponse = await fetch('extraction-viewer-standalone.html');
                     let viewerTemplate = await viewerResponse.text();
                     
-                    // Safe JSON replacement - avoid all JavaScript syntax issues
-                    const safeJsonData = JSON.stringify(mainData).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                    viewerTemplate = viewerTemplate.replace('/*DATA_PLACEHOLDER*/null', safeJsonData);
+                    // Safe JSON embedding - use JSON.stringify directly without problematic escaping
+                    const jsonData = JSON.stringify(mainData);
+                    // Replace the placeholder - the JSON is already properly escaped by JSON.stringify
+                    viewerTemplate = viewerTemplate.replace('/*DATA_PLACEHOLDER*/null', jsonData);
                     
                     zip.file('index.html', viewerTemplate);
                     progressText.textContent = 'Added standalone viewer with embedded data...';
@@ -5273,7 +5447,6 @@
                 
                 // Update buttons
                 document.getElementById('export-data').disabled = extractions.length === 0;
-                document.getElementById('extract-all').disabled = extractions.length === 0;
                 document.getElementById('delete-all-extractions').style.display = 
                     extractions.length > 0 ? 'inline-block' : 'none';
                 document.getElementById('manage-all').style.display = 
@@ -5303,7 +5476,6 @@
             
             // Update button states
             document.getElementById('export-data').disabled = true;
-            document.getElementById('extract-all').disabled = true;
             document.getElementById('delete-all-extractions').style.display = 'none';
             document.getElementById('manage-all').style.display = 'none';
         }
@@ -5858,21 +6030,21 @@
         // SERVER DETECTION AND HYBRID SESSION MANAGEMENT
         // ============================================================
         
-        // Determine the correct server URL based on environment
-        function getServerUrl() {
-            // Try different possible server locations
-            const possibleHosts = [
-                'localhost',           // Standard localhost
-                '127.0.0.1',          // IPv4 loopback
-                window.location.hostname  // Same host as the page
-            ];
-            
-            // If accessed from Windows browser to WSL, we need the WSL IP
-            // This will be the same as window.location.hostname when accessed correctly
-            return `http://${window.location.hostname}:5000`;
+        // Initialize API utilities with configuration
+        let SERVER_URL = '';
+        async function initializeApiConfig() {
+            try {
+                const settings = await window.settingsManager.getSettings();
+                ApiUtils.init(settings);
+                SERVER_URL = ApiUtils.getServerUrl();
+                return true;
+            } catch (error) {
+                console.error('Failed to initialize API config:', error);
+                // Fallback to hardcoded values
+                SERVER_URL = `http://${window.location.hostname}:5000`;
+                return false;
+            }
         }
-        
-        const SERVER_URL = getServerUrl();
         
         // Check if Flask server is available
         async function checkServerStatus() {
@@ -6212,12 +6384,13 @@
                 
                 // Add standalone viewer template with embedded data
                 try {
-                    const viewerResponse = await fetch('extraction-viewer-template.html');
+                    const viewerResponse = await fetch('extraction-viewer-standalone.html');
                     let viewerTemplate = await viewerResponse.text();
                     
-                    // Safe JSON replacement - avoid all JavaScript syntax issues
-                    const safeJsonData = JSON.stringify(mainData).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-                    viewerTemplate = viewerTemplate.replace('/*DATA_PLACEHOLDER*/null', safeJsonData);
+                    // Safe JSON embedding - use JSON.stringify directly without problematic escaping
+                    const jsonData = JSON.stringify(mainData);
+                    // Replace the placeholder - the JSON is already properly escaped by JSON.stringify
+                    viewerTemplate = viewerTemplate.replace('/*DATA_PLACEHOLDER*/null', jsonData);
                     
                     zip.file('index.html', viewerTemplate);
                     progressText.textContent = 'Added standalone viewer with embedded data...';
@@ -6822,7 +6995,6 @@
                             const nextPageBtn = document.getElementById('next-page');
                             const clearSelectionsBtn = document.getElementById('clear-selections');
                             const exportDataBtn = document.getElementById('export-data');
-                            const extractAllBtn = document.getElementById('extract-all');
                             const zoomInBtn = document.getElementById('zoom-in');
                             const zoomOutBtn = document.getElementById('zoom-out');
                             
@@ -6876,6 +7048,9 @@
         
         // Try to restore PDF state on page load
         document.addEventListener('DOMContentLoaded', async function() {
+            // Initialize API configuration
+            await initializeApiConfig();
+            
             // Wait for server detection and DOM to fully initialize
             setTimeout(async () => {
                 try {
